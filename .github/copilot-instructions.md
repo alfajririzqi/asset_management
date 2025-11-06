@@ -1,0 +1,332 @@
+# Blender Asset Management Addon - Copilot Instructions
+
+## 🎯 Addon Overview
+Production-ready Blender 4.0+ addon untuk asset management dengan fokus pada **publish workflow**, **texture optimization**, dan **versioning system**.
+
+## 📐 Architecture
+
+### Module Structure
+```
+asset_management/
+├── operators/          # Business logic & operations
+│   ├── publish.py     # Main publish operator dengan validation & logging
+│   ├── check_publish.py  # Pre-publish validation
+│   ├── versioning.py  # Version management
+│   ├── optimize_*.py  # Texture optimization operators
+│   └── ...
+├── panels/            # UI components
+│   ├── main_panel.py           # Root panel
+│   ├── publish_panel.py        # Publishing UI dengan validation results
+│   ├── versioning_panel.py     # Version creation/restore UI
+│   ├── file_management_panel.py # Texture operations UI
+│   └── batch_rename_panel.py   # Batch rename UI
+├── utils/             # Shared utilities (PENTING: mencegah circular imports)
+│   └── published_file_detector.py  # Multi-layer published file detection
+└── __init__.py        # Registration & app handlers
+```
+
+### 🔄 Critical Design Patterns
+
+#### 1. Circular Import Prevention
+**ALWAYS** letakkan shared utilities di `utils/` module, BUKAN di `operators/`.
+```python
+# ❌ WRONG - Causes circular import
+from ..operators.check_publish import detect_published_file_status
+
+# ✅ CORRECT - Independent utility
+from ..utils.published_file_detector import detect_published_file_status
+```
+
+**Why:** `operators/__init__.py` imports all operators → panels import from operators → circular dependency.
+
+#### 2. Published File Detection (3-Layer)
+```python
+# METHOD 1: Folder pattern (AssetName_v001, _v002, etc)
+folder_name = "Character_v001" → Published
+folder_name = "Character_WIP" → Source
+
+# METHOD 2: User's publish_path setting
+Check .publish_activity.log in publish_path directory
+
+# METHOD 3: Parent folder fallback
+Check parent directory for .publish_activity.log
+```
+
+**Caching:** Use `_publish_detection_cached` attribute to prevent repeated I/O on panel redraws.
+
+#### 3. Scene Properties for Persistent State
+```python
+# Validation results
+context.scene.publish_check_done: BoolProperty
+context.scene.publish_is_published_file: BoolProperty
+context.scene.publish_source_path: StringProperty
+
+# User settings
+context.scene.publish_path: StringProperty
+context.scene.publish_force: BoolProperty
+```
+
+**App Handler:** `reset_publish_validation_on_load()` clears validation on file load.
+
+## 🚨 Critical Safety Mechanisms
+
+### 1. Published File Protection (TOTAL BLOCK)
+**Philosophy:** Prevent recursive versioning - NEVER modify published files.
+
+**Implementation:**
+```python
+# In ALL panels (Versioning, File Management, Batch Rename, Publish)
+is_published, source = detect_published_file_status(context)
+
+if is_published:
+    row.alert = True
+    row.label(text=f"⚠ Published File (Source: {source})", icon='ERROR')
+    row.enabled = False  # Disable ALL operators
+```
+
+**Operators Blocked:**
+- ❌ Publish button
+- ❌ Create Version
+- ❌ Restore Version
+- ❌ All texture operations (optimize, consolidate, convert, etc)
+- ❌ Batch rename
+
+### 2. Force Publish - Option A (Total Bypass)
+**Rules:**
+- Only 2 ABSOLUTE blocks:
+  1. File not saved (`bpy.data.filepath` empty)
+  2. Publish path not set (`context.scene.publish_path` empty)
+  
+- Everything else = WARNING (force-able):
+  - Texture folder not found
+  - Missing textures
+  - External textures
+  - Orphan data
+  - Packed textures
+
+**Code Pattern:**
+```python
+def validate_publish(self, context):
+    errors = []
+    warnings = []
+    
+    # CRITICAL - Always block
+    if not bpy.data.filepath:
+        errors.append(("File not saved", "Save your file first"))
+    if not context.scene.publish_path:
+        errors.append(("No publish path", "Set publish path in settings"))
+    
+    # WARNINGS ONLY - Force publish bypasses these
+    if not os.path.exists(textures_dir):
+        warnings.append(("Texture folder not found", "Create textures/ folder"))
+    
+    return errors, warnings
+```
+
+### 3. Validation Required Before Publish
+```python
+# In publish operator invoke()
+if not context.scene.publish_check_done:
+    self.report({'ERROR'}, "Run 'Check Publish Readiness' first")
+    return {'CANCELLED'}
+```
+
+**Auto-Reset:** App handler clears `publish_check_done` on file load.
+
+## 📝 Logging System - Clean Delivery
+
+### Single Log File
+**Location:** `{publish_path}/.publish_activity.log` (root level, NOT in published folders)
+
+**Format:**
+```
+[2025-10-30 14:23:45] PUBLISH | Asset: Character | Path: D:\Publish\Character_v001 | Source: D:\Assets\Character | User: Artist | Mode: Normal | Textures: 15 | Status: SUCCESS
+[2025-10-30 14:25:12] PUBLISH | Asset: Prop | Path: D:\Publish\Prop_v001 | Source: D:\Assets\Prop | User: Artist | Mode: Force | Textures: 8 | Status: FAILED - External textures found
+```
+
+**Why Single Log:**
+- Clean client delivery (no metadata in published folders)
+- Centralized tracking
+- Easy parsing for detection
+
+**Removed:** Per-asset `.asset_history.json` files (old system)
+
+## 🎨 UI Guidelines
+
+### Inline Warnings (Consistent Pattern)
+```python
+# ✅ CORRECT - Per-item red color
+if is_published:
+    row = box.row()
+    row.alert = True  # Individual row alert
+    row.label(text="⚠ Warning message", icon='ERROR')
+
+# ❌ WRONG - Box-level alert (inconsistent)
+if is_published:
+    box.alert = True  # Don't do this
+```
+
+### Validation Results Display
+```python
+# Individual item colors (not box-level)
+for item_type, message, detail in validation_results:
+    row = box.row()
+    if item_type == "error":
+        row.alert = True  # Red color for this row only
+        row.label(text=f"✗ {message}", icon='ERROR')
+    elif item_type == "warning":
+        row.alert = True  # Red color for warnings too
+        row.label(text=f"⚠ {message}", icon='INFO')
+    else:
+        row.label(text=f"✓ {message}", icon='CHECKMARK')
+```
+
+### Button Disable Logic (Priority-based)
+```python
+# Priority 1: Published file (highest)
+if is_published:
+    row.enabled = False
+    row.label(text="Cannot publish: This is a published file")
+    
+# Priority 2: Validation not done
+elif not check_done:
+    row.enabled = False
+    row.label(text="Run validation first")
+    
+# Priority 3: Critical errors (only if not force)
+elif has_errors and not force_publish:
+    row.enabled = False
+    row.label(text="Fix errors or enable Force Publish")
+```
+
+## 🔧 Common Tasks
+
+### Adding New Panel Protection
+```python
+# 1. Import detector
+from ..utils.published_file_detector import detect_published_file_status
+
+# 2. Check at panel draw start
+def draw(self, context):
+    layout = self.layout
+    
+    # Detect published file
+    is_published, source = detect_published_file_status(context)
+    
+    # Show warning
+    if is_published:
+        box = layout.box()
+        row = box.row()
+        row.alert = True
+        source_display = source if source else "Unknown"
+        row.label(text=f"⚠ Published File (Source: {source_display})", icon='ERROR')
+    
+    # Disable operators
+    row = layout.row()
+    row.enabled = not is_published
+    row.operator("your.operator")
+```
+
+### Adding New Validation Check
+```python
+# In check_publish.py execute()
+
+# 1. Gather data
+new_check_value = your_check_logic()
+
+# 2. Store in scene property
+context.scene.your_check_result = new_check_value
+
+# 3. In publish_panel.py, display result
+if scene.your_check_result:
+    row = box.row()
+    row.alert = True  # Red if problem
+    row.label(text="✗ Your warning", icon='ERROR')
+```
+
+### Debugging Circular Imports
+```
+Error: AttributeError: module 'operators.check_publish' has no attribute 'detect_published_file_status'
+
+Solution:
+1. Check if function is in utils/, not operators/
+2. Update imports: from ..utils.published_file_detector import ...
+3. Verify utils/__init__.py exists
+4. Reload addon in Blender
+```
+
+## 🧪 Testing Checklist
+
+### After Major Changes
+- [ ] Reload addon in Blender (`F3` → "Reload Scripts")
+- [ ] Check all 4 panels load (Publishing, Versioning, File Management, Batch Rename)
+- [ ] Open source file → Operators enabled
+- [ ] Open published file → Inline warnings + operators disabled
+- [ ] Run validation → Results display with individual red colors
+- [ ] Test force publish → Bypasses warnings, blocks only critical errors
+- [ ] Check `.publish_activity.log` → Format correct, no files in published folders
+
+## 📋 Scene Properties Reference
+
+```python
+# Publishing
+publish_check_done: BoolProperty          # Validation completed
+publish_force: BoolProperty               # Force publish mode
+publish_path: StringProperty              # Publish directory
+
+# Published File Detection
+publish_is_published_file: BoolProperty   # Current file is published
+publish_source_path: StringProperty       # Original source path
+_publish_detection_cached: (dynamic)      # Cache to prevent repeated I/O
+
+# Validation Results
+publish_asset_name: StringProperty
+publish_file_name: StringProperty
+publish_textures_exist: BoolProperty
+publish_texture_count: IntProperty
+publish_external_textures: IntProperty
+publish_missing_textures: IntProperty
+publish_packed_textures: IntProperty
+publish_orphan_count: IntProperty
+```
+
+## 🚀 Development Workflow
+
+### Making Changes
+1. **Read context** from this file
+2. **Check existing patterns** in similar operators/panels
+3. **Follow architecture** (utils/ for shared code)
+4. **Test in Blender** after changes
+5. **Update this file** if adding new patterns
+
+### Key Principles
+- ⚠️ **Safety First:** Published file protection is NON-NEGOTIABLE
+- 📦 **Clean Delivery:** No metadata in published folders
+- 🔄 **Avoid Circular Imports:** Use utils/ for shared code
+- 🎨 **Consistent UI:** Individual row alerts, inline warnings
+- 📝 **Single Source of Truth:** One .publish_activity.log
+
+## 🐛 Known Issues & Solutions
+
+### Panels Not Loading
+**Symptom:** Empty N-panel, no UI visible
+**Cause:** Circular import (panels import from operators)
+**Solution:** Move shared code to utils/ module
+
+### Validation Not Resetting
+**Symptom:** Old validation results persist after opening new file
+**Cause:** App handler not clearing cache
+**Solution:** Check `reset_publish_validation_on_load()` in `__init__.py`
+
+### Detection Not Working
+**Symptom:** Published file not detected
+**Cause:** Cache not cleared or log format mismatch
+**Solution:** 
+1. Clear `_publish_detection_cached` attribute
+2. Check log format matches: `Path: {path} | Source: {source}`
+
+---
+
+**Last Updated:** 2025-10-30  
+**Blender Version:** 4.0+  
+**Python Version:** 3.10+
