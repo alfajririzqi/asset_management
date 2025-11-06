@@ -30,65 +30,141 @@ Stop wasting time on manual asset publishing and texture cleanup. This addon aut
 
 **Perfect for:** Freelancers, Asset Creators, Hobbyists, Small Studios
 
-**Blender Asset Management** is a comprehensive addon designed for production environments, offering automated validation, smart texture handling, and foolproof version control. Perfect for studios, freelancers, and technical artists who demand reliability.
-
-### Why This Addon?
-
-- ✅ **Zero-Config Publishing** - Pre-validation catches issues before delivery
-- 🔒 **Published File Protection** - Prevents accidental edits to released assets
-- 🎯 **Smart Analysis** - Deep scene scanning with detailed reports
-- 🚀 **Transform Safety** - Intelligent modifier handling with auto-backup
-- 📦 **Clean Delivery** - No metadata clutter in published folders
+**Blender Asset Management** is a comprehensive addon designed for production workflows, offering intelligent analysis, automated optimization, and foolproof publishing. Perfect for studios, freelancers, and technical artists who demand reliability and safety.
 
 ---
 
+## ✨ Features
+
+### 1️⃣ Asset Management
+
 <table>
 <tr>
-<td width="50%">
+<td width="33%">
 
-### 🚀 Publishing System
-- ✓ Pre-publish validation with detailed reports
-- ✓ Force Publish mode for controlled bypasses  
-- ✓ Automatic versioning (`v001`, `v002`...)
-- ✓ Clean delivery - single centralized log
-- ✓ Published file protection (3-layer detection)
-
-### 📊 Scene Analysis
-- ✓ Deep multi-threaded scanning
-- ✓ Material Usage & Texture Paths reports
-- ✓ Auto-switch to Scripting workspace
-- ✓ Modal progress bar (0-100%)
+#### 📊 Statistics
+- Real-time scene metrics
+- Object, material, texture counts
+- Library & node group tracking
+- Orphan data detection
+- Quick scene overview
 
 </td>
-<td width="50%">
+<td width="33%">
 
-### 🎨 Texture Optimization
-- ✓ Batch resolution control (downgrade/restore)
-- ✓ Format conversion (PNG ↔ JPEG)
-- ✓ Consolidate duplicates
-- ✓ Auto-correct texture mapping
-- ✓ Cleanup unused textures
+#### 🔍 Analysis Tools
+**High Poly Analysis**
+- Configurable triangle threshold
+- Modifier-aware counting
+- Isolate/select high-poly objects
+- Real-time tri count display
 
-### 🛡️ Transform Safety
-- ✓ Auto-workflow with modifier detection
-- ✓ ARMATURE protection (rigged objects safe)
-- ✓ Automatic backup to `.temp` collection
-- ✓ Sequential: Backup → Apply Mods → Transform
+**Transform Check**
+- Detect unapplied transforms
+- Find extreme scale values
+- Identify rotation issues
+- Bulk apply with safety
+
+</td>
+<td width="33%">
+
+#### ⚡ Optimization Tools
+**Asset Optimization**
+- Optimize linked objects
+- Consolidate material duplicates
+- Merge texture duplicates
+
+**Cleanup Operations**
+- Clear unused material slots
+- Remove orphan data blocks
+- Deep scene cleanup
 
 </td>
 </tr>
 </table>
 
-<details>
-<summary><b>📦 Additional Features</b></summary>
+---
 
-- **Version Control**: Create/restore numbered versions with descriptions
-- **File Cleanup**: Clear orphan data, optimize materials
-- **Batch Operations**: Rename textures with patterns
-- **High Poly Analysis**: Detect heavy meshes with configurable thresholds
-- **Transform Analysis**: Find objects with non-default transforms
+### 2️⃣ Batch Rename Texture Tools
 
-</details>
+- **Find & Replace**: Multiple search-replace rules
+- **Prefix/Suffix**: Add consistent naming
+- **Auto-Correct Maps**: Smart texture type detection
+- **Batch File Save**: Apply renames to disk
+- **Pattern Support**: Flexible naming conventions
+
+---
+
+### 3️⃣ File Management
+
+**Texture Optimization:**
+- Downgrade/restore resolution (2K → 1K → 512px...)
+- Format conversion (PNG ↔ JPEG)
+- Consolidate duplicate textures
+- Cleanup unused textures from project
+
+**Statistics Display:**
+- Total texture count
+- External textures warning
+- Unused textures count
+- Packed textures tracking
+
+---
+
+### 4️⃣ Versioning
+
+- **Auto-Increment**: Automatic version numbering (v001, v002...)
+- **Version Descriptions**: Add notes to each version
+- **Restore System**: Revert to any previous version
+- **Version Browser**: List all versions with dates
+- **Safety Checks**: Prevents versioning published files
+
+---
+
+### 5️⃣ Publishing
+
+**Pre-Publish Validation:**
+- Texture folder verification
+- Missing texture detection
+- External texture warnings
+- Orphan data checks
+- Packed texture alerts
+
+**Publishing Features:**
+- Force Publish mode (bypass warnings)
+- Automatic versioning (v001, v002...)
+- Clean delivery structure
+- Centralized logging (`.publish_activity.log`)
+- Linked library support (optional)
+
+**Linked Libraries:**
+- Include/exclude in publish
+- Validate library paths
+- Deep copy library assets
+- Texture consolidation for libraries
+
+---
+
+### 🛡️ Work Safely - Published File Protection
+
+**3-Layer Detection System:**
+1. **Folder Pattern**: Detects `AssetName_v###` naming
+2. **Log Parsing**: Checks `.publish_activity.log`
+3. **Parent Fallback**: Scans parent directories
+
+**Protection Features:**
+- ⛔ Blocks all operations on published files
+- 🚫 Prevents recursive versioning (v001_v001)
+- 📍 Shows source file path
+- 🔒 Automatic detection on file open
+- ⚡ Performance-optimized caching
+
+**Disabled Operations When Published File Detected:**
+- ❌ Publishing
+- ❌ Versioning
+- ❌ Texture optimization
+- ❌ Batch rename
+- ❌ All file modifications
 
 ---
 
@@ -402,7 +478,6 @@ Please include:
 ### Development
 
 For architecture details and coding guidelines, see:
-- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - Architecture guide
 - **[docs/](docs/)** - Technical documentation
 
 ---
