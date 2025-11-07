@@ -409,9 +409,9 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         for mat in sorted(bpy.data.materials, key=lambda x: x.name):
             if mat.name in material_usage:
                 usage_list = sorted(material_usage[mat.name])
-                lines.append(self._format_usage_hybrid(mat.name, usage_list, "objects", threshold=5))
+                lines.append(self._format_usage_hybrid(mat.name, usage_list, "objects", threshold=5, emoji="📦 "))
             else:
-                lines.append(f"{mat.name}: NOT ASSIGNED TO ANY OBJECT ⚠️")
+                lines.append(f"📦 {mat.name}: NOT ASSIGNED TO ANY OBJECT ⚠️")
             lines.append("")
 
         lines.append("=" * 60)
@@ -459,15 +459,15 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         for img in sorted(all_textures, key=lambda x: x.name):
             if img.name in texture_usage:
                 usage_list = sorted(texture_usage[img.name])
-                lines.append(self._format_usage_hybrid(img.name, usage_list, "materials", threshold=5))
+                lines.append(self._format_usage_hybrid(img.name, usage_list, "materials", threshold=5, emoji="🖼️  "))
             else:
-                lines.append(f"{img.name}: NOT USED IN ANY MATERIAL ⚠️")
+                lines.append(f"🖼️  {img.name}: NOT USED IN ANY MATERIAL ⚠️")
             lines.append("")
 
         lines.append("=" * 60)
         return "\n".join(lines)
 
-    def _format_usage_hybrid(self, item_name, usage_list, category="items", threshold=5):
+    def _format_usage_hybrid(self, item_name, usage_list, category="items", threshold=5, emoji=""):
         """
         Smart hybrid formatting based on list length
         
@@ -476,6 +476,7 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             usage_list: List of items using this resource
             category: Category name for display (objects/materials)
             threshold: Max items for horizontal format (default: 5)
+            emoji: Emoji prefix for the item (e.g., 📦 for materials, 🖼️ for textures)
         
         Returns:
             Formatted string with hybrid layout
@@ -485,10 +486,10 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         # Horizontal format for items ≤ threshold
         if count <= threshold:
             items_str = ", ".join(usage_list)
-            return f"{item_name}: Used by {count} {category} [{items_str}]"
+            return f"{emoji}{item_name}: Used by {count} {category} [{items_str}]"
         
         # Vertical format for items > threshold
-        lines = [f"{item_name}: Used by {count} {category}"]
+        lines = [f"{emoji}{item_name}: Used by {count} {category}"]
         for i, item in enumerate(usage_list):
             if i < count - 1:
                 lines.append(f"  ├─ {item}")

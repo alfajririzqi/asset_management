@@ -306,15 +306,29 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
                 row.alert = True
                 row.label(text="⚠ DANGEROUS MODIFIERS DETECTED", icon='ERROR')
                 
-                # List objects and their dangerous modifiers
-                box.label(text="Objects with risky modifiers:", icon='INFO')
-                for obj_name, mod_list in danger_report.items():
-                    obj_row = box.row()
-                    obj_row.label(text=f"• {obj_name}:", icon='OBJECT_DATA')
-                    
-                    for mod_name in mod_list:
-                        mod_row = box.row()
-                        mod_row.label(text=f"    - {mod_name}", icon='MODIFIER')
+                layout.separator()
+                
+                # List objects with grid layout (2 columns)
+                obj_box = layout.box()
+                obj_box.label(text="Objects with risky modifiers:", icon='INFO')
+                
+                # Use grid for object names (2 columns)
+                grid = obj_box.grid_flow(row_major=True, columns=2, align=True)
+                grid.scale_y = 0.8
+                
+                max_display = 15
+                obj_items = list(danger_report.items())[:max_display]
+                
+                for obj_name, mod_list in obj_items:
+                    # Show object name with modifier count
+                    mod_count = len(mod_list)
+                    grid.label(text=f"• {obj_name} ({mod_count} mods)", icon='OBJECT_DATA')
+                
+                # Show "more items" if list is long
+                if len(danger_report) > max_display:
+                    obj_box.separator()
+                    row = obj_box.row()
+                    row.label(text=f"... and {len(danger_report) - max_display} more objects", icon='THREE_DOTS')
                 
                 # Workflow explanation
                 layout.separator()
