@@ -536,112 +536,203 @@ This addon is **100% free** and always will be. If you'd like to support develop
 
 ### v2.0 PRO (Planned - Optional Upgrade ~$15-19)
 
-#### 🚀 Core Pro Features
+**Theme:** Automate Batch Operations for Large-Scale Projects
 
-**1. Batch Publishing System** ⭐⭐⭐⭐⭐
-- Queue multiple assets for one-click publishing
-- Background processing with progress tracking
-- Publish presets (Game-ready, Archviz, Preview)
-- Schedule overnight batch publishing
-- Auto-retry failed items
-
-**2. Smart Asset Library & Browser** ⭐⭐⭐⭐⭐
-- Visual thumbnail browser for published assets
-- Search by tags, type, date, project
-- Drag-and-drop import to scene
-- Track asset usage across projects
-- Quick 360° preview rotation
-- Favorite/bookmark system
-
-**3. Template Publishing Workflows** ⭐⭐⭐⭐⭐
-- Save/load client-specific publish profiles
-- Pre-configured export standards:
-  - Game Engine (2K textures, optimized mesh)
-  - Archviz (4K textures, high-poly)
-  - Web/AR (1K textures, decimated)
-- Custom validation rules per template
-- Share templates across projects
-
-**4. Asset Health Dashboard** ⭐⭐⭐⭐
-- Real-time quality score (0-100)
-- Detect common issues before delivery:
-  - High poly count warnings
-  - Missing UV maps
-  - Non-manifold geometry
-  - Texture optimization opportunities
-- One-click auto-fix suggestions
-- Export validation reports (PDF/HTML)
-
-**5. Material Library Manager** ⭐⭐⭐⭐
-- Save materials with preview thumbnails
-- Categorize by type (Metal, Wood, Fabric, etc.)
-- Material versioning (update all instances)
-- Export/import material packs
-- Drag-and-drop application
-
-**6. Multi-Format Export Hub** ⭐⭐⭐⭐
-- One-click export to multiple formats:
-  - FBX (Unity, Unreal Engine)
-  - USD (Pixar pipeline)
-  - GLTF/GLB (Web, AR/VR)
-  - OBJ (Universal compatibility)
-  - Alembic (VFX workflows)
-- Per-format settings profiles
-- Batch export entire collections
-
-#### 📊 Additional Pro Features
-
-**7. Asset Analytics & Reporting**
-- Project statistics dashboard
-- Generate client delivery reports (PDF)
-- Asset thumbnails with technical specs
-- Optimization summaries
-- Export history tracking
-
-**8. Automated Quality Control**
-- N-gon detection with auto-fix
-- Zero-area faces cleanup
-- Normal map direction validation
-- Naming convention enforcement
-- Custom QC checklists
+Pro version focuses on **batch automation** - transforming manual one-by-one workflows into powerful bulk operations. Perfect for freelancers and asset creators working with 10-50+ assets per project.
 
 ---
 
-### Why Pro Features Are Worth It?
+#### 🚀 Core Pro Features
 
-**Time Savings:**
-- Batch Publishing: **2-3 hours saved per project**
-- Asset Library: **Find & reuse assets in seconds** vs. hunting folders for 10+ minutes
-- Templates: **Switch client standards instantly** vs. manual reconfiguration
+**1. Batch Publishing System** ⭐⭐⭐⭐⭐
 
-**Quality Improvements:**
-- Health Dashboard: **Catch errors before client delivery**
-- Auto QC: **Professional output every time**
-- Validation Reports: **Show clients you care about quality**
+**What it does:**
+- Queue multiple blend files for simultaneous publishing
+- Background processing with real-time progress tracking
+- Process entire project folders with one click
+- Auto-retry failed publishes
+- Success/failure summary report
+
+**Use Case:**
+```
+Scenario: You finished 20 props for a game asset pack
+
+v1.0 FREE (Manual):
+• Open file 1 → Validate → Publish → Close
+• Open file 2 → Validate → Publish → Close
+• ... repeat 18 more times
+• Time: 2-3 hours ⏰
+
+v2.0 PRO (Batch):
+• Select all 20 blend files
+• Click "Batch Publish"
+• Go make coffee ☕
+• Come back to 20 published assets
+• Time: 5 minutes setup + background processing 🚀
+
+Time Saved: 2-3 hours per batch
+```
+
+---
+
+**2. Batch Downgrade Texture** ⭐⭐⭐⭐⭐
+
+**What it does:**
+- Downgrade all textures in multiple files at once
+- Select target resolution (4K → 2K → 1K → 512px)
+- Process entire project folders
+- Preview before/after file sizes
+- Rollback option (restore original resolution)
+
+**Use Case:**
+```
+Scenario: Client wants web-optimized version (1K textures) of 50 assets
+
+v1.0 FREE (Manual):
+• Open asset 1
+• Select texture 1 → Downgrade → Save
+• Select texture 2 → Downgrade → Save
+• ... repeat for 4 textures per asset × 50 assets
+• Time: 30-60 minutes ⏰
+
+v2.0 PRO (Batch):
+• Select all 50 blend files
+• Choose "Downgrade to 1K"
+• Click "Batch Process"
+• All textures downgraded automatically
+• Time: 2 minutes 🚀
+
+Time Saved: 30-60 minutes per batch
+File Size Reduction: 50-75% average
+```
+
+---
+
+**3. Batch Convert Image Format** ⭐⭐⭐⭐⭐
+
+**What it does:**
+- Convert all textures to different formats in bulk
+- Support for multiple formats:
+  - **PNG** (lossless, transparency)
+  - **JPEG** (compressed, smaller size)
+  - **TIFF** (high-quality archival)
+  - **TGA** (game engines like Unity/Unreal)
+  - **EXR** (HDR workflows)
+  - **WebP** (web optimization, smaller than PNG)
+- Per-format quality settings
+- Batch convert for different delivery targets
+
+**Use Case:**
+```
+Scenario: Multi-platform delivery
+• Unity needs TGA
+• Unreal needs PNG
+• Web needs WebP
+
+v1.0 FREE (Manual):
+• Convert 200 textures to TGA (one by one)
+• Convert 200 textures to PNG (one by one)
+• Convert 200 textures to WebP (one by one)
+• Time: 1-2 hours ⏰
+
+v2.0 PRO (Batch):
+• Select all project files
+• Choose "Export Unity (TGA)"
+• Choose "Export Unreal (PNG)"
+• Choose "Export Web (WebP)"
+• 3 clicks, all textures converted
+• Time: 5 minutes 🚀
+
+Time Saved: 45-90 minutes per multi-format delivery
+```
+
+---
+
+**4. Batch Cleanup Operations** ⭐⭐⭐⭐⭐
+
+**What it does:**
+- Run cleanup operations on multiple files simultaneously
+- Operations included:
+  - Clear orphan data (unused meshes, materials, images)
+  - Remove unused material slots
+  - Delete packed textures (if external exist)
+  - Purge all unused data blocks
+  - Optimize file sizes
+- Before/after file size comparison
+- Cleanup summary report
+
+**Use Case:**
+```
+Scenario: Pre-delivery cleanup of 30 assets
+
+v1.0 FREE (Manual):
+• Open file 1
+• Clear orphan data
+• Remove unused slots
+• Save → Close
+• ... repeat 30 times
+• Time: 1-2 hours ⏰
+
+v2.0 PRO (Batch):
+• Select all 30 blend files
+• Choose cleanup operations
+• Click "Batch Cleanup"
+• All files optimized automatically
+• Time: 3 minutes 🚀
+
+Time Saved: 1-2 hours per batch
+File Size Reduction: 30-50% average
+Client Delivery: Cleaner, more professional
+```
+
+---
+
+### 💰 Pro Version Value Proposition
+
+**Total Time Saved Per Large Project:**
+- Batch Publishing: 2-3 hours
+- Batch Downgrade: 30-60 minutes
+- Batch Convert: 45-90 minutes
+- Batch Cleanup: 1-2 hours
+
+**Total: 4-7 hours saved per project** ⏰
 
 **ROI Calculation:**
 ```
 Freelancer Rate:        $30/hour
-Time Saved Per Project: 2-3 hours
-Projects Per Year:      10-20
+Time Saved:             4-7 hours per project
+Value Per Project:      $120-210
 
-Annual Savings:         $600-1,800
 Pro Version Cost:       $19 one-time
+Break-even:             First project pays 6-11x! 🎉
 
-Break-even: First project! 🎉
+Annual Savings (10 projects/year):
+$1,200 - $2,100 in time saved
 ```
 
 ---
 
-### Development Timeline
+### 🎯 Why Batch Focus is Perfect
 
-**Phase 1 (Months 1-3):** Gather v1.0 user feedback  
-**Phase 2 (Months 4-6):** Design Pro features based on demand  
-**Phase 3 (Months 7-9):** Develop core Pro features (Batch, Library, Templates)  
-**Phase 4 (Month 10-12):** Beta testing with early adopters  
-**Phase 5 (Month 12+):** Pro version launch
+**1. Clear Value:** "v1.0 = manual, v2.0 = batch" (easy to understand)  
+**2. Immediate ROI:** Hours saved from day one  
+**3. Target Market Fit:** Freelancers handle 10-50+ assets per project  
+**4. Low Learning Curve:** Same operations, just automated  
+**5. Affordable:** $19 is lunch money vs. hours of manual work  
 
-**Note:** All v1.0 features remain **100% FREE forever**. Pro is an optional upgrade for power users who need advanced workflow automation.
+---
+
+### 📅 Development Timeline
+
+**Phase 1 (Months 1-3):** v1.0 user feedback & community building  
+**Phase 2 (Months 4-6):** Design batch operation architecture  
+**Phase 3 (Months 7-9):** Develop 4 core batch features  
+**Phase 4 (Months 10-11):** Beta testing with power users  
+**Phase 5 (Month 12):** Pro version launch + marketing  
+
+**Estimated Development Time:** 3-4 weeks full-time coding
+
+**Note:** All v1.0 features remain **100% FREE forever**. Pro is purely additive - no features removed or paywalled.
 
 ---
 
