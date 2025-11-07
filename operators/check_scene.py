@@ -59,20 +59,16 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             self._progress = 10
             tex_paths_report = self._generate_texture_paths_report()
 
-            self._progress = 30
-            data_usage_report = self._generate_data_usage_report()
-
-            self._progress = 60
+            self._progress = 40
             material_usage_report = self._generate_material_usage_report()
 
-            self._progress = 80
+            self._progress = 70
             texture_usage_report = self._generate_texture_usage_report()
 
             self._progress = 90
             self._reports_data = {
                 'success': True,
                 'reports': [
-                    {'name': "Scene_DataUsage", 'content': data_usage_report},
                     {'name': "Scene_MaterialUsage", 'content': material_usage_report},
                     {'name': "Scene_TextureUsage", 'content': texture_usage_report},
                     {'name': "Scene_TexturePaths", 'content': tex_paths_report}
@@ -95,7 +91,7 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         """Generate texture paths report with resolution and relative/absolute paths"""
         lines = []
         lines.append("=" * 60)
-        lines.append("TEXTURE PATHS REPORT")
+        lines.append("📁 TEXTURE PATHS REPORT")
         lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
         lines.append("")
@@ -377,7 +373,7 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         """Generate material usage report with hybrid formatting"""
         lines = []
         lines.append("=" * 60)
-        lines.append("MATERIAL USAGE REPORT")
+        lines.append("📦 MATERIAL USAGE REPORT")
         lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
         lines.append("")
@@ -425,7 +421,7 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         """Generate texture usage report with hybrid formatting"""
         lines = []
         lines.append("=" * 60)
-        lines.append("TEXTURE USAGE REPORT")
+        lines.append("🖼️  TEXTURE USAGE REPORT")
         lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
         lines.append("")
@@ -681,39 +677,6 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
         
         layout.separator()
         
-        # Preview Scene_DataUsage Report (Main Overview)
-        if "Scene_DataUsage" in bpy.data.texts:
-            data_usage = bpy.data.texts["Scene_DataUsage"]
-            content = data_usage.as_string()
-            lines = content.split('\n')
-            
-            box = layout.box()
-            box.label(text="� Scene_DataUsage Report:", icon='TEXT')
-            
-            col = box.column(align=True)
-            col.scale_y = 0.7
-            
-            # Show statistics section (skip header)
-            preview_count = 0
-            start_showing = False
-            
-            for line in lines:
-                # Start showing after header
-                if not start_showing:
-                    if line.startswith("📊 STATISTICS"):
-                        start_showing = True
-                    else:
-                        continue
-                
-                # Show overview (stats + warnings + footer)
-                if preview_count < 20:
-                    col.label(text=line)
-                    preview_count += 1
-                else:
-                    break
-        
-        layout.separator()
-        
         # Preview Scene_MaterialUsage Report
         if "Scene_MaterialUsage" in bpy.data.texts:
             mat_report = bpy.data.texts["Scene_MaterialUsage"]
@@ -837,7 +800,6 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
         info_col = info_box.column(align=True)
         info_col.scale_y = 0.8
         info_col.label(text="📝 Full reports saved in Text Editor:", icon='INFO')
-        info_col.label(text="    • Scene_DataUsage (Overview)", icon='BLANK1')
         info_col.label(text="    • Scene_MaterialUsage (Material assignments)", icon='BLANK1')
         info_col.label(text="    • Scene_TextureUsage (Texture usage)", icon='BLANK1')
         info_col.label(text="    • Scene_TexturePaths (File paths)", icon='BLANK1')

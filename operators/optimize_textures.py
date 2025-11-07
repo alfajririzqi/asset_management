@@ -42,14 +42,44 @@ class ASSET_OT_optimize_texture_duplicates(bpy.types.Operator):
 
     def draw(self, context):
         layout = self.layout
-        layout.label(text="Textures to be optimized:", icon='INFO')
-
-        for group in self.duplicate_groups:
+        
+        total_duplicates = sum(len(group) - 1 for group in self.duplicate_groups)
+        
+        # Header with summary
+        box = layout.box()
+        box.label(text=f"🖼️  Found {len(self.duplicate_groups)} duplicate group(s)", icon='INFO')
+        box.label(text=f"Total {total_duplicates} texture(s) will be merged", icon='TEXTURE')
+        
+        layout.separator()
+        
+        # Show first few groups with grid layout
+        max_groups = 15
+        for i, group in enumerate(self.duplicate_groups[:max_groups]):
+            if i > 0:
+                layout.separator(factor=0.5)
+            
             base = group[0]
+            layout.label(text=f"Base: {base.name}", icon='TEXTURE')
+            
+            # Grid layout for duplicates (2 columns)
+            duplicates = group[1:]
+            if duplicates:
+                grid = layout.grid_flow(row_major=True, columns=2, align=True)
+                grid.scale_y = 0.8
+                
+                max_display = 6  # Show max 6 duplicates per group
+                for img in duplicates[:max_display]:
+                    grid.label(text=f"→ {img.name}", icon='LINKED')
+                
+                # Show "more items" if list is long
+                if len(duplicates) > max_display:
+                    layout.label(text=f"  ... and {len(duplicates) - max_display} more", icon='THREE_DOTS')
+        
+        # Show "more groups" if many groups
+        if len(self.duplicate_groups) > max_groups:
             layout.separator()
-            layout.label(text=f" • Base: {base.name}", icon='TEXTURE')
-            for img in group[1:]:
-                layout.label(text=f"   → {img.name}", icon='LINKED')
+            row = layout.row()
+            row.label(text=f"... and {len(self.duplicate_groups) - max_groups} more groups", icon='THREE_DOTS')
 
     def execute(self, context):
         textures_removed = 0

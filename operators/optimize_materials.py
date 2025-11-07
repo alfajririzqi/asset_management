@@ -228,26 +228,42 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
         layout = self.layout
         
         total_duplicates = sum(len(group) - 1 for group in self.duplicate_groups)
-        layout.label(text=f"Found {len(self.duplicate_groups)} duplicate group(s)", icon='INFO')
-        layout.label(text=f"Total {total_duplicates} material(s) will be merged", icon='MATERIAL')
+        
+        # Header with summary
+        box = layout.box()
+        box.label(text=f"📦 Found {len(self.duplicate_groups)} duplicate group(s)", icon='INFO')
+        box.label(text=f"Total {total_duplicates} material(s) will be merged", icon='MATERIAL')
+        
         layout.separator()
         
-        for i, group in enumerate(self.duplicate_groups[:5]):
+        # Show first few groups with grid layout
+        max_groups = 15
+        for i, group in enumerate(self.duplicate_groups[:max_groups]):
             if i > 0:
                 layout.separator(factor=0.5)
             
             base = group[0]
-            layout.label(text=f"• Base: {base.name}", icon='MATERIAL')
+            layout.label(text=f"Base: {base.name}", icon='MATERIAL')
             
-            for mat in group[1:3]:  
-                layout.label(text=f"  → {mat.name}", icon='LINKED')
-            
-            if len(group) > 3:
-                layout.label(text=f"  → ... and {len(group) - 3} more", icon='BLANK1')
+            # Grid layout for duplicates (2 columns)
+            duplicates = group[1:]
+            if duplicates:
+                grid = layout.grid_flow(row_major=True, columns=2, align=True)
+                grid.scale_y = 0.8
+                
+                max_display = 6  # Show max 6 duplicates per group
+                for mat in duplicates[:max_display]:
+                    grid.label(text=f"→ {mat.name}", icon='LINKED')
+                
+                # Show "more items" if list is long
+                if len(duplicates) > max_display:
+                    layout.label(text=f"  ... and {len(duplicates) - max_display} more", icon='THREE_DOTS')
         
-        if len(self.duplicate_groups) > 5:
+        # Show "more groups" if many groups
+        if len(self.duplicate_groups) > max_groups:
             layout.separator()
-            layout.label(text=f"... and {len(self.duplicate_groups) - 5} more groups", icon='BLANK1')
+            row = layout.row()
+            row.label(text=f"... and {len(self.duplicate_groups) - max_groups} more groups", icon='THREE_DOTS')
 
     def execute(self, context):
         materials_removed = 0
