@@ -1224,10 +1224,10 @@ def register():
         name="Versioning Mode",
         description="How to handle file versioning",
         items=[
-            ('VERSIONING', 'Versioning', 'Create versioned files (rumah_v001.blend, v002, etc.)', 'FILE_TICK', 0),
-            ('OVERWRITE', 'Overwrite', 'Always overwrite existing file (no versions)', 'FILE_REFRESH', 1),
+            ('OVERWRITE', 'Overwrite', 'Always overwrite existing file (no versions)', 'FILE_REFRESH', 0),
+            ('VERSIONING', 'Versioning', 'Create versioned files (rumah_v001.blend, v002, etc.)', 'FILE_TICK', 1),
         ],
-        default='VERSIONING'
+        default='OVERWRITE'
     )
     
     # Force publish (bypass warnings)

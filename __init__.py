@@ -23,7 +23,6 @@ bl_info = {
     "category": "Pipeline",
     "license": "GPL-3.0",
     "doc_url": "https://github.com/alfajririzqi/asset_management",
-    "tracker_url": "https://github.com/alfajririzqi/asset_management/issues",
 }
 
 import bpy

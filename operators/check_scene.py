@@ -224,16 +224,46 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         lines.append(f"Linked Library Textures: {sum(len(imgs) for imgs in linked_library_images.values())}")
         lines.append(f"Unused Textures in Folder: {len(unused_textures)}")
         lines.append("")
+        lines.append("=" * 60)
+        lines.append("")
         
-        # Found images
+        # === CURRENT FILE ===
+        lines.append("=== CURRENT FILE ===")
+        lines.append("")
+        
+        # Found images (current file)
         if found_images:
-            lines.append("[FOUND]")
+            lines.append("[FOUND - Current File]")
             for img in sorted(found_images, key=lambda x: x['path']):
                 lines.append(f"  • {img['path']} == ({img['resolution']}) [{img['size']}]")
             lines.append("")
 
-        # Linked library textures
+        # Missing images (current file)
+        if missing_images:
+            lines.append("[MISSING - Current File]")
+            for img in sorted(missing_images, key=lambda x: x['path']):
+                lines.append(f"  • ✗ {img['path']}")
+                lines.append(f"    Expected: {img['abs_path']}")
+            lines.append("")
+
+        # Packed images (current file)
+        if packed_images:
+            lines.append("[PACKED - Current File]")
+            for img in sorted(packed_images, key=lambda x: x['name']):
+                lines.append(f"  • 📦 {img['name']} == ({img['resolution']})")
+            lines.append("")
+
+        # Unused textures in folder (current file)
+        if unused_textures:
+            lines.append("[UNUSED IN FOLDER /textures]")
+            for tex in sorted(unused_textures, key=lambda x: x['path']):
+                lines.append(f"  • {tex['path']} [{tex['size']}]")
+            lines.append("")
+
+        # === LINKED LIBRARIES ===
         if linked_library_images:
+            lines.append("-" * 60)
+            lines.append("")
             lines.append("[LINKED LIBRARIES]")
             for lib_path, images in sorted(linked_library_images.items()):
                 # Display library path
@@ -253,28 +283,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                     lines.append("  No textures")
                 
                 lines.append("")
-
-        # Missing images
-        if missing_images:
-            lines.append("[MISSING]")
-            for img in sorted(missing_images, key=lambda x: x['path']):
-                lines.append(f"  • ✗ {img['path']}")
-                lines.append(f"    Expected: {img['abs_path']}")
-            lines.append("")
-
-        # Packed images
-        if packed_images:
-            lines.append("[PACKED]")
-            for img in sorted(packed_images, key=lambda x: x['name']):
-                lines.append(f"  • 📦 {img['name']} == ({img['resolution']})")
-            lines.append("")
-
-        # Unused textures in folder
-        if unused_textures:
-            lines.append("[UNUSED IN FOLDER /textures]")
-            for tex in sorted(unused_textures, key=lambda x: x['path']):
-                lines.append(f"  • {tex['path']} [{tex['size']}]")
-            lines.append("")
 
         lines.append("=" * 60)
         return "\n".join(lines)
@@ -370,7 +378,7 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         return "\n".join(lines)
 
     def _generate_material_usage_report(self):
-        """Generate material usage report with hybrid formatting"""
+        """Generate material usage report with hybrid formatting, grouped by source file"""
         lines = []
         lines.append("=" * 60)
         lines.append("📦 MATERIAL USAGE REPORT")
@@ -392,6 +400,19 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                     if obj.name not in material_usage[mat.name]:
                         material_usage[mat.name].append(obj.name)
 
+        # Group materials by source (current file vs linked libraries)
+        current_file_materials = []
+        linked_materials = {}  # {library_path: [materials]}
+        
+        for mat in bpy.data.materials:
+            if mat.library:
+                lib_path = mat.library.filepath
+                if lib_path not in linked_materials:
+                    linked_materials[lib_path] = []
+                linked_materials[lib_path].append(mat)
+            else:
+                current_file_materials.append(mat)
+
         # Count statistics
         total_materials = len(bpy.data.materials)
         used_materials = len(material_usage)
@@ -402,23 +423,47 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         if orphan_materials > 0:
             lines.append(f"Orphan Materials: {orphan_materials} ⚠️")
         lines.append("")
-        lines.append("-" * 60)
+        lines.append("=" * 60)
         lines.append("")
 
-        # Format material usage with hybrid approach
-        for mat in sorted(bpy.data.materials, key=lambda x: x.name):
-            if mat.name in material_usage:
-                usage_list = sorted(material_usage[mat.name])
-                lines.append(self._format_usage_hybrid(mat.name, usage_list, "objects", threshold=5, emoji="📦 "))
-            else:
-                lines.append(f"📦 {mat.name}: NOT ASSIGNED TO ANY OBJECT ⚠️")
+        # === CURRENT FILE ===
+        lines.append("=== CURRENT FILE ===")
+        lines.append(f"Materials: {len(current_file_materials)}")
+        lines.append("")
+        
+        if current_file_materials:
+            for mat in sorted(current_file_materials, key=lambda x: x.name):
+                if mat.name in material_usage:
+                    usage_list = sorted(material_usage[mat.name])
+                    lines.append(self._format_usage_hybrid(mat.name, usage_list, "objects", threshold=5, emoji="📦 "))
+                else:
+                    lines.append(f"📦 {mat.name}: NOT ASSIGNED TO ANY OBJECT ⚠️")
+                lines.append("")
+        else:
+            lines.append("No materials in current file")
             lines.append("")
+
+        # === LINKED LIBRARIES ===
+        if linked_materials:
+            for lib_path in sorted(linked_materials.keys()):
+                lines.append("-" * 60)
+                lines.append(f"=== LINKED LIBRARY: {lib_path} ===")
+                lines.append(f"Materials: {len(linked_materials[lib_path])}")
+                lines.append("")
+                
+                for mat in sorted(linked_materials[lib_path], key=lambda x: x.name):
+                    if mat.name in material_usage:
+                        usage_list = sorted(material_usage[mat.name])
+                        lines.append(self._format_usage_hybrid(mat.name, usage_list, "objects", threshold=5, emoji="📦 "))
+                    else:
+                        lines.append(f"📦 {mat.name}: NOT ASSIGNED TO ANY OBJECT ⚠️")
+                    lines.append("")
 
         lines.append("=" * 60)
         return "\n".join(lines)
 
     def _generate_texture_usage_report(self):
-        """Generate texture usage report with hybrid formatting"""
+        """Generate texture usage report with hybrid formatting, grouped by source file"""
         lines = []
         lines.append("=" * 60)
         lines.append("🖼️  TEXTURE USAGE REPORT")
@@ -440,9 +485,23 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                     if mat.name not in texture_usage[img_name]:
                         texture_usage[img_name].append(mat.name)
 
-        # Count statistics
+        # Group textures by source (current file vs linked libraries)
         all_textures = [img for img in bpy.data.images 
                        if img.source == 'FILE' and img.name not in ('Render Result', 'Viewer Node')]
+        
+        current_file_textures = []
+        linked_textures = {}  # {library_path: [textures]}
+        
+        for img in all_textures:
+            if img.library:
+                lib_path = img.library.filepath
+                if lib_path not in linked_textures:
+                    linked_textures[lib_path] = []
+                linked_textures[lib_path].append(img)
+            else:
+                current_file_textures.append(img)
+
+        # Count statistics
         total_textures = len(all_textures)
         used_textures = len(texture_usage)
         orphan_textures = total_textures - used_textures
@@ -452,17 +511,41 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         if orphan_textures > 0:
             lines.append(f"Orphan Textures: {orphan_textures} ⚠️")
         lines.append("")
-        lines.append("-" * 60)
+        lines.append("=" * 60)
         lines.append("")
 
-        # Format texture usage with hybrid approach
-        for img in sorted(all_textures, key=lambda x: x.name):
-            if img.name in texture_usage:
-                usage_list = sorted(texture_usage[img.name])
-                lines.append(self._format_usage_hybrid(img.name, usage_list, "materials", threshold=5, emoji="🖼️  "))
-            else:
-                lines.append(f"🖼️  {img.name}: NOT USED IN ANY MATERIAL ⚠️")
+        # === CURRENT FILE ===
+        lines.append("=== CURRENT FILE ===")
+        lines.append(f"Textures: {len(current_file_textures)}")
+        lines.append("")
+        
+        if current_file_textures:
+            for img in sorted(current_file_textures, key=lambda x: x.name):
+                if img.name in texture_usage:
+                    usage_list = sorted(texture_usage[img.name])
+                    lines.append(self._format_usage_hybrid(img.name, usage_list, "materials", threshold=5, emoji="🖼️  "))
+                else:
+                    lines.append(f"🖼️  {img.name}: NOT USED IN ANY MATERIAL ⚠️")
+                lines.append("")
+        else:
+            lines.append("No textures in current file")
             lines.append("")
+
+        # === LINKED LIBRARIES ===
+        if linked_textures:
+            for lib_path in sorted(linked_textures.keys()):
+                lines.append("-" * 60)
+                lines.append(f"=== LINKED LIBRARY: {lib_path} ===")
+                lines.append(f"Textures: {len(linked_textures[lib_path])}")
+                lines.append("")
+                
+                for img in sorted(linked_textures[lib_path], key=lambda x: x.name):
+                    if img.name in texture_usage:
+                        usage_list = sorted(texture_usage[img.name])
+                        lines.append(self._format_usage_hybrid(img.name, usage_list, "materials", threshold=5, emoji="🖼️  "))
+                    else:
+                        lines.append(f"🖼️  {img.name}: NOT USED IN ANY MATERIAL ⚠️")
+                    lines.append("")
 
         lines.append("=" * 60)
         return "\n".join(lines)

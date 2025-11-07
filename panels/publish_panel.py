@@ -124,16 +124,21 @@ class ASSET_PT_Publish(bpy.types.Panel):
         library_box = layout.box()
         library_box.label(text="Linked Libraries:", icon='LINKED')
         
-        # Include libraries checkbox (independent of publish settings)
+        # Include libraries checkbox (enabled only after check)
         row = library_box.row()
         row.prop(scene, "publish_include_libraries", text="Publish Linked Libraries")
         
-        # Only disable if this is a published file
+        # Disable if published file OR if check not done
         if scene.publish_is_published_file:
             row.enabled = False
             info_row = library_box.row()
             info_row.scale_y = 0.7
             info_row.label(text="⚠ Cannot modify from published file", icon='INFO')
+        elif not scene.publish_check_done:
+            row.enabled = False
+            info_row = library_box.row()
+            info_row.scale_y = 0.7
+            info_row.label(text="⚠ Run 'Check Publish Readiness' first", icon='INFO')
         
         # Only show library details if enabled
         if scene.publish_include_libraries:
