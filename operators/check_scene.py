@@ -2,10 +2,10 @@ import bpy, threading, os
 from datetime import datetime
 
 class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
-    """Analyze scene deeply - Generate detailed reports for textures, materials, and data usage"""
+    """Analyze scene deeply - Generate 4 detailed reports: Data Usage (overview), Material Usage, Texture Usage, and Texture Paths"""
     bl_idname = "scene.analyze_deep"
     bl_label = "Analyze Scene Deeply"
-    bl_description = "Generate comprehensive reports: Texture paths, Material usage, and Data statistics"
+    bl_description = "Generate comprehensive reports with hybrid formatting for better readability"
     bl_options = {'REGISTER'}
 
     _timer = None
@@ -57,17 +57,25 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
     def _generate_reports_thread(self):
         try:
             self._progress = 10
-            tex_report = self._generate_texture_paths_report()
+            tex_paths_report = self._generate_texture_paths_report()
 
-            self._progress = 50
-            mat_report = self._generate_material_usage_report()
+            self._progress = 30
+            data_usage_report = self._generate_data_usage_report()
+
+            self._progress = 60
+            material_usage_report = self._generate_material_usage_report()
+
+            self._progress = 80
+            texture_usage_report = self._generate_texture_usage_report()
 
             self._progress = 90
             self._reports_data = {
                 'success': True,
                 'reports': [
-                    {'name': "Scene_TexturePaths", 'content': tex_report},
-                    {'name': "Scene_DataUsage", 'content': mat_report}
+                    {'name': "Scene_DataUsage", 'content': data_usage_report},
+                    {'name': "Scene_MaterialUsage", 'content': material_usage_report},
+                    {'name': "Scene_TextureUsage", 'content': texture_usage_report},
+                    {'name': "Scene_TexturePaths", 'content': tex_paths_report}
                 ]
             }
             self._progress = 100
@@ -275,8 +283,226 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         lines.append("=" * 60)
         return "\n".join(lines)
 
+    def _generate_data_usage_report(self):
+        """Generate concise overview report with statistics and warnings"""
+        lines = []
+        lines.append("=" * 60)
+        lines.append("SCENE DATA USAGE REPORT")
+        lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append("=" * 60)
+        lines.append("")
+
+        # Count statistics
+        total_objects = len([obj for obj in bpy.data.objects if obj.type == 'MESH'])
+        total_materials = len(bpy.data.materials)
+        total_textures = len([img for img in bpy.data.images 
+                             if img.source == 'FILE' and img.name not in ('Render Result', 'Viewer Node')])
+
+        lines.append(f"📊 STATISTICS:")
+        lines.append(f"  • Total Objects: {total_objects}")
+        lines.append(f"  • Total Materials: {total_materials}")
+        lines.append(f"  • Total Textures: {total_textures}")
+        lines.append("")
+
+        # Analyze material and texture usage
+        material_usage = {}
+        texture_usage = {}
+        
+        for obj in bpy.data.objects:
+            if obj.type != 'MESH':
+                continue
+            for slot in obj.material_slots:
+                if slot.material:
+                    mat = slot.material
+                    if mat.name not in material_usage:
+                        material_usage[mat.name] = []
+                    if obj.name not in material_usage[mat.name]:
+                        material_usage[mat.name].append(obj.name)
+                    
+                    # Get textures from material
+                    if mat.use_nodes and mat.node_tree:
+                        for node in mat.node_tree.nodes:
+                            if node.type == 'TEX_IMAGE' and node.image:
+                                if node.image.name not in texture_usage:
+                                    texture_usage[node.image.name] = []
+                                if mat.name not in texture_usage[node.image.name]:
+                                    texture_usage[node.image.name].append(mat.name)
+
+        # Count orphans
+        orphan_materials = [mat.name for mat in bpy.data.materials if mat.name not in material_usage]
+        orphan_textures = [img.name for img in bpy.data.images 
+                          if img.source == 'FILE' and img.name not in ('Render Result', 'Viewer Node') 
+                          and img.name not in texture_usage]
+
+        # Warnings section
+        has_warnings = False
+        if orphan_materials or orphan_textures:
+            lines.append("⚠️  WARNINGS:")
+            has_warnings = True
+            
+            if orphan_materials:
+                lines.append(f"  • {len(orphan_materials)} materials not assigned to any object")
+            if orphan_textures:
+                lines.append(f"  • {len(orphan_textures)} textures not used in any material")
+            lines.append("")
+
+        # Linked libraries count
+        linked_collections = {}
+        for collection in bpy.data.collections:
+            if collection.library:
+                lib_path = collection.library.filepath
+                if lib_path not in linked_collections:
+                    linked_collections[lib_path] = []
+                linked_collections[lib_path].append(collection.name)
+        
+        if linked_collections:
+            if not has_warnings:
+                lines.append("")
+            lines.append(f"🔗 LINKED LIBRARIES:")
+            lines.append(f"  • {len(linked_collections)} linked library file(s)")
+            lines.append("")
+
+        # Footer with references to detailed reports
+        lines.append("-" * 60)
+        lines.append("📋 DETAILED REPORTS AVAILABLE:")
+        lines.append("  → Scene_MaterialUsage  (Material assignments per object)")
+        lines.append("  → Scene_TextureUsage   (Texture usage per material)")
+        lines.append("  → Scene_TexturePaths   (File paths and resolutions)")
+        lines.append("")
+        lines.append("=" * 60)
+        
+        return "\n".join(lines)
+
     def _generate_material_usage_report(self):
-        """Generate material usage report with linked library collections"""
+        """Generate material usage report with hybrid formatting"""
+        lines = []
+        lines.append("=" * 60)
+        lines.append("MATERIAL USAGE REPORT")
+        lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append("=" * 60)
+        lines.append("")
+
+        # Collect material usage
+        material_usage = {}
+        
+        for obj in bpy.data.objects:
+            if obj.type != 'MESH':
+                continue
+            for slot in obj.material_slots:
+                if slot.material:
+                    mat = slot.material
+                    if mat.name not in material_usage:
+                        material_usage[mat.name] = []
+                    if obj.name not in material_usage[mat.name]:
+                        material_usage[mat.name].append(obj.name)
+
+        # Count statistics
+        total_materials = len(bpy.data.materials)
+        used_materials = len(material_usage)
+        orphan_materials = total_materials - used_materials
+
+        lines.append(f"Total Materials: {total_materials}")
+        lines.append(f"Used Materials: {used_materials}")
+        if orphan_materials > 0:
+            lines.append(f"Orphan Materials: {orphan_materials} ⚠️")
+        lines.append("")
+        lines.append("-" * 60)
+        lines.append("")
+
+        # Format material usage with hybrid approach
+        for mat in sorted(bpy.data.materials, key=lambda x: x.name):
+            if mat.name in material_usage:
+                usage_list = sorted(material_usage[mat.name])
+                lines.append(self._format_usage_hybrid(mat.name, usage_list, "objects", threshold=5))
+            else:
+                lines.append(f"{mat.name}: NOT ASSIGNED TO ANY OBJECT ⚠️")
+            lines.append("")
+
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
+    def _generate_texture_usage_report(self):
+        """Generate texture usage report with hybrid formatting"""
+        lines = []
+        lines.append("=" * 60)
+        lines.append("TEXTURE USAGE REPORT")
+        lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        lines.append("=" * 60)
+        lines.append("")
+
+        # Collect texture usage
+        texture_usage = {}
+        
+        for mat in bpy.data.materials:
+            if not mat.use_nodes or not mat.node_tree:
+                continue
+            for node in mat.node_tree.nodes:
+                if node.type == 'TEX_IMAGE' and node.image:
+                    img_name = node.image.name
+                    if img_name not in texture_usage:
+                        texture_usage[img_name] = []
+                    if mat.name not in texture_usage[img_name]:
+                        texture_usage[img_name].append(mat.name)
+
+        # Count statistics
+        all_textures = [img for img in bpy.data.images 
+                       if img.source == 'FILE' and img.name not in ('Render Result', 'Viewer Node')]
+        total_textures = len(all_textures)
+        used_textures = len(texture_usage)
+        orphan_textures = total_textures - used_textures
+
+        lines.append(f"Total Textures: {total_textures}")
+        lines.append(f"Used Textures: {used_textures}")
+        if orphan_textures > 0:
+            lines.append(f"Orphan Textures: {orphan_textures} ⚠️")
+        lines.append("")
+        lines.append("-" * 60)
+        lines.append("")
+
+        # Format texture usage with hybrid approach
+        for img in sorted(all_textures, key=lambda x: x.name):
+            if img.name in texture_usage:
+                usage_list = sorted(texture_usage[img.name])
+                lines.append(self._format_usage_hybrid(img.name, usage_list, "materials", threshold=5))
+            else:
+                lines.append(f"{img.name}: NOT USED IN ANY MATERIAL ⚠️")
+            lines.append("")
+
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
+    def _format_usage_hybrid(self, item_name, usage_list, category="items", threshold=5):
+        """
+        Smart hybrid formatting based on list length
+        
+        Args:
+            item_name: Name of the item (material/texture)
+            usage_list: List of items using this resource
+            category: Category name for display (objects/materials)
+            threshold: Max items for horizontal format (default: 5)
+        
+        Returns:
+            Formatted string with hybrid layout
+        """
+        count = len(usage_list)
+        
+        # Horizontal format for items ≤ threshold
+        if count <= threshold:
+            items_str = ", ".join(usage_list)
+            return f"{item_name}: Used by {count} {category} [{items_str}]"
+        
+        # Vertical format for items > threshold
+        lines = [f"{item_name}: Used by {count} {category}"]
+        for i, item in enumerate(usage_list):
+            if i < count - 1:
+                lines.append(f"  ├─ {item}")
+            else:
+                lines.append(f"  └─ {item}")
+        
+        return "\n".join(lines)
+
+    def _generate_material_usage_report_old(self):
+        """Generate material usage report with linked library collections - OLD VERSION"""
         lines = []
         lines.append("=" * 60)
         lines.append("SCENE DATA USAGE REPORT")
@@ -455,67 +681,135 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
         
         layout.separator()
         
-        # Preview Scene_DataUsage Report (skip stats lines)
+        # Preview Scene_DataUsage Report (Main Overview)
         if "Scene_DataUsage" in bpy.data.texts:
             data_usage = bpy.data.texts["Scene_DataUsage"]
             content = data_usage.as_string()
             lines = content.split('\n')
             
             box = layout.box()
-            box.label(text="📄 Scene_DataUsage Report:", icon='TEXT')
+            box.label(text="� Scene_DataUsage Report:", icon='TEXT')
             
             col = box.column(align=True)
             col.scale_y = 0.7
             
-            # Skip stats lines and show content directly
+            # Show statistics section (skip header)
+            preview_count = 0
+            start_showing = False
+            
+            for line in lines:
+                # Start showing after header
+                if not start_showing:
+                    if line.startswith("📊 STATISTICS"):
+                        start_showing = True
+                    else:
+                        continue
+                
+                # Show overview (stats + warnings + footer)
+                if preview_count < 20:
+                    col.label(text=line)
+                    preview_count += 1
+                else:
+                    break
+        
+        layout.separator()
+        
+        # Preview Scene_MaterialUsage Report
+        if "Scene_MaterialUsage" in bpy.data.texts:
+            mat_report = bpy.data.texts["Scene_MaterialUsage"]
+            content = mat_report.as_string()
+            lines = content.split('\n')
+            
+            box = layout.box()
+            box.label(text="📦 Scene_MaterialUsage Report:", icon='MATERIAL')
+            
+            col = box.column(align=True)
+            col.scale_y = 0.7
+            
+            # Skip header and show first few materials
             preview_count = 0
             start_showing = False
             skipped_lines = 0
             
             for i, line in enumerate(lines):
-                # Start showing after stats section (after "----")
                 if not start_showing:
                     if line.startswith("-" * 10):  # Divider after stats
                         start_showing = True
-                        skipped_lines = i + 2  # Skip divider and empty line after it
+                        skipped_lines = i + 2
                     continue
                 
-                # Show 15 lines of actual content
-                if preview_count < 15:
+                if preview_count < 10:
                     col.label(text=line)
                     preview_count += 1
                 else:
                     break
             
             # Show "more lines" indicator
-            if len(lines) - skipped_lines > 15:
-                remaining = len(lines) - skipped_lines - 15
+            if len(lines) - skipped_lines > 10:
+                remaining = len(lines) - skipped_lines - 10
                 box.separator()
                 row = box.row()
                 row.label(text=f"... {remaining} more lines", icon='THREE_DOTS')
-                row.label(text="See full report →", icon='INFO')
         
         layout.separator()
         
-        # Preview Scene_TexturePaths Report (skip stats lines)
+        # Preview Scene_TextureUsage Report
+        if "Scene_TextureUsage" in bpy.data.texts:
+            tex_usage_report = bpy.data.texts["Scene_TextureUsage"]
+            content = tex_usage_report.as_string()
+            lines = content.split('\n')
+            
+            box = layout.box()
+            box.label(text="🖼️  Scene_TextureUsage Report:", icon='TEXTURE')
+            
+            col = box.column(align=True)
+            col.scale_y = 0.7
+            
+            # Skip header and show first few textures
+            preview_count = 0
+            start_showing = False
+            skipped_lines = 0
+            
+            for i, line in enumerate(lines):
+                if not start_showing:
+                    if line.startswith("-" * 10):  # Divider after stats
+                        start_showing = True
+                        skipped_lines = i + 2
+                    continue
+                
+                if preview_count < 10:
+                    col.label(text=line)
+                    preview_count += 1
+                else:
+                    break
+            
+            # Show "more lines" indicator
+            if len(lines) - skipped_lines > 10:
+                remaining = len(lines) - skipped_lines - 10
+                box.separator()
+                row = box.row()
+                row.label(text=f"... {remaining} more lines", icon='THREE_DOTS')
+        
+        layout.separator()
+        
+        # Preview Scene_TexturePaths Report
         if "Scene_TexturePaths" in bpy.data.texts:
             texture_report = bpy.data.texts["Scene_TexturePaths"]
             content = texture_report.as_string()
             lines = content.split('\n')
             
             box = layout.box()
-            box.label(text="📄 Scene_TexturePaths Report:", icon='TEXTURE')
+            box.label(text="� Scene_TexturePaths Report:", icon='FILE_IMAGE')
             
             col = box.column(align=True)
             col.scale_y = 0.7
             
-            # Skip stats lines and show content directly
+            # Skip stats and show first section
             preview_count = 0
             start_showing = False
             skipped_lines = 0
             
             for i, line in enumerate(lines):
-                # Start showing at [FOUND] section
                 if not start_showing:
                     if line.startswith("[FOUND]") or line.startswith("[LINKED") or line.startswith("[MISSING]"):
                         start_showing = True
@@ -523,20 +817,18 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
                     else:
                         continue
                 
-                # Show 15 lines of actual content
-                if preview_count < 15:
+                if preview_count < 10:
                     col.label(text=line)
                     preview_count += 1
                 else:
                     break
             
             # Show "more lines" indicator
-            if len(lines) - skipped_lines > 15:
-                remaining = len(lines) - skipped_lines - 15
+            if len(lines) - skipped_lines > 10:
+                remaining = len(lines) - skipped_lines - 10
                 box.separator()
                 row = box.row()
                 row.label(text=f"... {remaining} more lines", icon='THREE_DOTS')
-                row.label(text="See full report →", icon='INFO')
         
         layout.separator()
         
@@ -545,8 +837,10 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
         info_col = info_box.column(align=True)
         info_col.scale_y = 0.8
         info_col.label(text="📝 Full reports saved in Text Editor:", icon='INFO')
-        info_col.label(text="    • Scene_DataUsage", icon='BLANK1')
-        info_col.label(text="    • Scene_TexturePaths", icon='BLANK1')
+        info_col.label(text="    • Scene_DataUsage (Overview)", icon='BLANK1')
+        info_col.label(text="    • Scene_MaterialUsage (Material assignments)", icon='BLANK1')
+        info_col.label(text="    • Scene_TextureUsage (Texture usage)", icon='BLANK1')
+        info_col.label(text="    • Scene_TexturePaths (File paths)", icon='BLANK1')
         info_col.label(text="Open Scripting workspace to view full reports", icon='BLANK1')
 
 
