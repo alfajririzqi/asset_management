@@ -100,8 +100,74 @@ class ASSET_PT_Publish(bpy.types.Panel):
                     row.label(text=f"{scene.publish_orphan_count} orphan data blocks", icon='ERROR')
                 else:
                     col.label(text=f"{scene.publish_orphan_count} orphan data blocks", icon='INFO')
-            else:
-                col.label(text="No orphan data", icon='CHECKMARK')
+            
+            # Large textures warning (if enabled in preferences)
+            if hasattr(scene, 'publish_large_texture_count') and scene.publish_large_texture_count > 0:
+                # Get max resolution from preferences for display
+                try:
+                    prefs = bpy.context.preferences.addons['asset_management'].preferences
+                    max_res_label = {
+                        '1024': '1K',
+                        '2048': '2K',
+                        '4096': '4K',
+                        '8192': '8K'
+                    }.get(prefs.max_texture_resolution, '4K')
+                except Exception:
+                    max_res_label = '4K'
+                
+                if not scene.publish_force:
+                    row = col.row()
+                    row.alert = True
+                    row.label(text=f"{scene.publish_large_texture_count} textures exceed {max_res_label} resolution", icon='ERROR')
+                else:
+                    col.label(text=f"{scene.publish_large_texture_count} textures exceed {max_res_label} resolution", icon='INFO')
+            
+            # ===== NEW VALIDATION CHECKS =====
+            
+            # High poly objects
+            if hasattr(scene, 'publish_highpoly_count') and scene.publish_highpoly_count > 0:
+                if not scene.publish_force:
+                    row = col.row()
+                    row.alert = True
+                    row.label(text=f"{scene.publish_highpoly_count} high poly objects (Tools: Check High Poly)", icon='ERROR')
+                else:
+                    col.label(text=f"{scene.publish_highpoly_count} high poly objects", icon='INFO')
+            
+            # Transform issues
+            if hasattr(scene, 'publish_transform_issue_count') and scene.publish_transform_issue_count > 0:
+                if not scene.publish_force:
+                    row = col.row()
+                    row.alert = True
+                    row.label(text=f"{scene.publish_transform_issue_count} objects with transform issues (Tools: Check Transforms)", icon='ERROR')
+                else:
+                    col.label(text=f"{scene.publish_transform_issue_count} objects with transform issues", icon='INFO')
+            
+            # Empty material slots
+            if hasattr(scene, 'publish_empty_slots_count') and scene.publish_empty_slots_count > 0:
+                if not scene.publish_force:
+                    row = col.row()
+                    row.alert = True
+                    row.label(text=f"{scene.publish_empty_slots_count} empty material slots (Tools: Clear Unused Slots)", icon='ERROR')
+                else:
+                    col.label(text=f"{scene.publish_empty_slots_count} empty material slots", icon='INFO')
+            
+            # Duplicate textures
+            if hasattr(scene, 'publish_duplicate_texture_count') and scene.publish_duplicate_texture_count > 0:
+                if not scene.publish_force:
+                    row = col.row()
+                    row.alert = True
+                    row.label(text=f"{scene.publish_duplicate_texture_count} duplicate textures (Tools: Optimize Textures)", icon='ERROR')
+                else:
+                    col.label(text=f"{scene.publish_duplicate_texture_count} duplicate textures", icon='INFO')
+            
+            # Duplicate materials
+            if hasattr(scene, 'publish_duplicate_material_count') and scene.publish_duplicate_material_count > 0:
+                if not scene.publish_force:
+                    row = col.row()
+                    row.alert = True
+                    row.label(text=f"{scene.publish_duplicate_material_count} duplicate materials (Tools: Optimize Materials)", icon='ERROR')
+                else:
+                    col.label(text=f"{scene.publish_duplicate_material_count} duplicate materials", icon='INFO')
             
             # Force Publish option (if has warnings)
             if scene.publish_has_warnings:
@@ -124,11 +190,11 @@ class ASSET_PT_Publish(bpy.types.Panel):
         library_box = layout.box()
         library_box.label(text="Linked Libraries:", icon='LINKED')
         
-        # Include libraries checkbox (enabled only after check)
+        # Include libraries checkbox (requires pre-publish validation first)
         row = library_box.row()
         row.prop(scene, "publish_include_libraries", text="Publish Linked Libraries")
         
-        # Disable if published file OR if check not done
+        # Disable if: 1) Published file, OR 2) Pre-publish validation not done
         if scene.publish_is_published_file:
             row.enabled = False
             info_row = library_box.row()

@@ -322,9 +322,19 @@ def register():
     register_icon()
     
     # High Poly Analysis settings
+    # Default value loaded from addon preferences (highpoly_default_threshold)
+    def get_highpoly_default():
+        """Get default threshold from addon preferences"""
+        try:
+            prefs = bpy.context.preferences.addons['asset_management'].preferences
+            return prefs.highpoly_default_threshold
+        except:
+            return 10000  # Fallback if preferences not available
+    
     bpy.types.Scene.highpoly_threshold = bpy.props.IntProperty(
-        default=50000,
-        min=1
+        default=10000,  # Matches preferences default
+        min=1,
+        max=10000000
     )
     
     bpy.types.Scene.highpoly_use_modifiers = bpy.props.BoolProperty(

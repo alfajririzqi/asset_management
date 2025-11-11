@@ -8,9 +8,9 @@ import os
 
 def quick_validate_linked_libraries(context):
     """
-    Quick validation for linked libraries.
+    Quick validation for linked libraries (without publish_path requirement).
     
-    Checks:
+    Directly scans bpy.data.libraries and checks:
     - File exists
     - File is readable
     - Has textures folder
@@ -20,34 +20,43 @@ def quick_validate_linked_libraries(context):
     Returns:
         tuple: (total_count, error_count, warning_count)
     """
-    # Import scanner from publish.py
-    from .publish import LinkedLibraryScanner, PathResolver, CircularDependencyError
-    
-    publish_path = context.scene.publish_path
-    if not publish_path:
-        return (0, 0, 0)
-    
     # Clear existing collection
     context.scene.publish_library_selection.clear()
     
     try:
-        # Scan libraries
-        scanner = LinkedLibraryScanner(publish_path, max_depth=3)
-        libraries = scanner.scan()
+        # Get all linked libraries directly from bpy.data
+        libraries = list(bpy.data.libraries)
         
         total_count = len(libraries)
         error_count = 0
         warning_count = 0
         
+        if total_count == 0:
+            # No libraries found
+            context.scene.publish_library_count = 0
+            context.scene.publish_library_errors = 0
+            context.scene.publish_library_warnings = 0
+            context.scene.publish_libraries_validated = True
+            return (0, 0, 0)
+        
         # Validate each library
-        for lib_info in libraries:
+        for lib in libraries:
             # Create item in collection
             item = context.scene.publish_library_selection.add()
-            item.name = lib_info['library_name']
-            item.filepath = lib_info['absolute']
-            item.structure = lib_info['structure']
-            item.folder_name = lib_info['folder_name']
-            item.depth = lib_info['depth']
+            item.name = lib.name
+            
+            # Get absolute path
+            lib_filepath = bpy.path.abspath(lib.filepath)
+            item.filepath = lib_filepath
+            
+            # Extract folder name from path
+            if lib_filepath:
+                folder_name = os.path.basename(os.path.dirname(lib_filepath))
+                item.folder_name = folder_name
+            
+            # No structure/depth info (we don't have publish_path context)
+            item.structure = ""
+            item.depth = 1
             item.selected = True  # Default: all selected
             
             # Validation checks
@@ -55,19 +64,21 @@ def quick_validate_linked_libraries(context):
             warnings = []
             
             # Check 1: File exists
-            if not lib_info['exists']:
+            if not os.path.exists(lib_filepath):
                 errors.append("File not found")
                 error_count += 1
             else:
                 # Check 2: File readable (try to get size)
                 try:
-                    os.path.getsize(lib_info['absolute'])
+                    os.path.getsize(lib_filepath)
                 except Exception as e:
                     errors.append(f"Cannot read file: {str(e)}")
                     error_count += 1
                 
                 # Check 3: Has textures folder
-                if not lib_info['has_textures']:
+                lib_dir = os.path.dirname(lib_filepath)
+                textures_dir = os.path.join(lib_dir, "textures")
+                if not os.path.exists(textures_dir):
                     warnings.append("No textures folder")
                     warning_count += 1
                 else:
@@ -89,18 +100,13 @@ def quick_validate_linked_libraries(context):
         
         return (total_count, error_count, warning_count)
         
-    except CircularDependencyError as e:
-        # Store error in scene property
+    except Exception as e:
+        print(f"Library validation error: {e}")
+        import traceback
+        traceback.print_exc()
         context.scene.publish_library_count = 0
         context.scene.publish_library_errors = 1
         context.scene.publish_library_warnings = 0
-        context.scene.publish_libraries_validated = True
-        return (0, 1, 0)
-    
-    except Exception as e:
-        print(f"Library validation error: {e}")
-        context.scene.publish_library_count = 0
-        context.scene.publish_library_errors = 1
         context.scene.publish_libraries_validated = True
         return (0, 1, 0)
 
@@ -184,8 +190,147 @@ class ASSET_OT_CheckPublish(bpy.types.Operator):
             if img.name not in ('Render Result', 'Viewer Node') and img.users == 0:
                 orphan_count += 1
         
+        # Check texture resolution (if enabled in preferences)
+        large_texture_count = 0
+        try:
+            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+            if prefs.check_texture_resolution:
+                # Get max resolution from preferences (default 4096)
+                max_res = int(prefs.max_texture_resolution)
+                
+                for img in bpy.data.images:
+                    if img.name in ('Render Result', 'Viewer Node'):
+                        continue
+                    if img.source != 'FILE':
+                        continue
+                    # Check if resolution exceeds threshold
+                    if img.size[0] > max_res or img.size[1] > max_res:
+                        large_texture_count += 1
+        except Exception:
+            pass  # Preferences not available or disabled
+        
+        # ===== NEW VALIDATION CHECKS =====
+        
+        # 1. Check high poly objects (use scene's highpoly_threshold, not from preferences)
+        highpoly_count = 0
+        try:
+            # Use threshold from scene property (Check High Poly panel)
+            threshold = context.scene.highpoly_threshold if hasattr(context.scene, 'highpoly_threshold') else 50000
+            
+            for obj in context.view_layer.objects:
+                if obj.type != 'MESH':
+                    continue
+                # Calculate triangle count
+                depsgraph = context.evaluated_depsgraph_get()
+                eval_obj = obj.evaluated_get(depsgraph)
+                mesh = eval_obj.to_mesh()
+                tris = sum(len(p.vertices) - 2 for p in mesh.polygons)
+                eval_obj.to_mesh_clear()
+                
+                if tris > threshold:
+                    highpoly_count += 1
+        except Exception:
+            pass
+        
+        # 2. Check transform issues (if enabled)
+        transform_issue_count = 0
+        try:
+            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+            if prefs.check_transform_issues:
+                for obj in context.view_layer.objects:
+                    if obj.type != 'MESH':
+                        continue
+                    
+                    has_issue = False
+                    
+                    # Check unapplied scale
+                    scale = obj.scale
+                    if not (abs(scale.x - 1.0) < 0.0001 and 
+                           abs(scale.y - 1.0) < 0.0001 and 
+                           abs(scale.z - 1.0) < 0.0001):
+                        has_issue = True
+                    
+                    # Check unapplied rotation
+                    rot = obj.rotation_euler
+                    if not (abs(rot.x) < 0.0001 and 
+                           abs(rot.y) < 0.0001 and 
+                           abs(rot.z) < 0.0001):
+                        has_issue = True
+                    
+                    if has_issue:
+                        transform_issue_count += 1
+        except Exception:
+            pass
+        
+        # 3. Check empty material slots (if enabled)
+        empty_slots_count = 0
+        try:
+            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+            if prefs.check_empty_material_slots:
+                for obj in context.view_layer.objects:
+                    if obj.type != 'MESH' or not obj.data:
+                        continue
+                    
+                    mesh = obj.data
+                    used_material_indices = set(poly.material_index for poly in mesh.polygons)
+                    
+                    # Check each slot
+                    for i, slot in enumerate(obj.material_slots):
+                        # Empty slot or unused slot
+                        if slot.material is None or i not in used_material_indices:
+                            empty_slots_count += 1
+        except Exception:
+            pass
+        
+        # 4. Check duplicate textures (if enabled)
+        duplicate_texture_count = 0
+        try:
+            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+            if prefs.check_duplicate_textures:
+                from collections import defaultdict
+                image_groups = defaultdict(list)
+                for img in bpy.data.images:
+                    if img.filepath:  # Only external images
+                        image_groups[img.filepath].append(img)
+                # Count duplicates (groups with more than 1 image)
+                for images in image_groups.values():
+                    if len(images) > 1:
+                        duplicate_texture_count += len(images) - 1
+        except Exception:
+            pass
+        
+        # 5. Check duplicate materials (if enabled)
+        duplicate_material_count = 0
+        try:
+            prefs = context.preferences.addons[__package__.split('.')[0]].preferences
+            if prefs.check_duplicate_materials:
+                from collections import defaultdict
+                # Simple duplicate detection by name pattern (ends with .001, .002, etc)
+                material_groups = defaultdict(list)
+                for mat in bpy.data.materials:
+                    # Remove numeric suffix
+                    base_name = mat.name
+                    if '.' in base_name:
+                        parts = base_name.rsplit('.', 1)
+                        if parts[1].isdigit() and len(parts[1]) == 3:
+                            base_name = parts[0]
+                    material_groups[base_name].append(mat)
+                
+                # Count duplicates
+                for mats in material_groups.values():
+                    if len(mats) > 1:
+                        duplicate_material_count += len(mats) - 1
+        except Exception:
+            pass
+        
         # Store results in scene properties
         context.scene.publish_check_done = True
+        context.scene.publish_large_texture_count = large_texture_count
+        context.scene.publish_highpoly_count = highpoly_count
+        context.scene.publish_transform_issue_count = transform_issue_count
+        context.scene.publish_empty_slots_count = empty_slots_count
+        context.scene.publish_duplicate_texture_count = duplicate_texture_count
+        context.scene.publish_duplicate_material_count = duplicate_material_count
         context.scene.publish_asset_name = asset_name
         context.scene.publish_file_name = fname
         context.scene.publish_textures_exist = textures_exist
@@ -199,12 +344,17 @@ class ASSET_OT_CheckPublish(bpy.types.Operator):
         # Critical errors: ONLY absolute requirements (no publish path)
         has_critical_errors = (not context.scene.publish_path)
         
-        # Warnings: ALL other issues can be forced (no textures, external, missing, packed, orphan)
+        # Warnings: ALL other issues can be forced (textures, optimization, transforms, etc)
         has_warnings = (not textures_exist or 
                        external_count > 0 or 
                        missing_count > 0 or
                        packed_count > 0 or 
-                       orphan_count > 0)
+                       orphan_count > 0 or
+                       highpoly_count > 0 or
+                       transform_issue_count > 0 or
+                       empty_slots_count > 0 or
+                       duplicate_texture_count > 0 or
+                       duplicate_material_count > 0)
         
         context.scene.publish_has_errors = has_critical_errors
         context.scene.publish_has_warnings = has_warnings
@@ -226,12 +376,7 @@ class ASSET_OT_ValidateLibraries(bpy.types.Operator):
             self.report({'WARNING'}, "File not saved")
             return {'CANCELLED'}
         
-        # Check publish path set
-        if not context.scene.publish_path:
-            self.report({'ERROR'}, "Set publish path first")
-            return {'CANCELLED'}
-        
-        # Run validation
+        # Run validation (no publish_path required - scans bpy.data.libraries directly)
         total, errors, warnings = quick_validate_linked_libraries(context)
         
         # Report results

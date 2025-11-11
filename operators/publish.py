@@ -1284,6 +1284,50 @@ def register():
         description="Number of libraries with warnings",
         default=0
     )
+    
+    # Large texture count (for validation warning)
+    bpy.types.Scene.publish_large_texture_count = IntProperty(
+        name="Large Texture Count",
+        description="Number of textures exceeding 4K resolution",
+        default=0
+    )
+    
+    # ===== NEW VALIDATION RESULTS =====
+    
+    # High poly objects count
+    bpy.types.Scene.publish_highpoly_count = IntProperty(
+        name="High Poly Objects",
+        description="Number of objects exceeding polygon threshold",
+        default=0
+    )
+    
+    # Transform issues count
+    bpy.types.Scene.publish_transform_issue_count = IntProperty(
+        name="Transform Issues",
+        description="Number of objects with unapplied transforms",
+        default=0
+    )
+    
+    # Empty material slots count
+    bpy.types.Scene.publish_empty_slots_count = IntProperty(
+        name="Empty Material Slots",
+        description="Number of objects with empty or unused material slots",
+        default=0
+    )
+    
+    # Duplicate textures count
+    bpy.types.Scene.publish_duplicate_texture_count = IntProperty(
+        name="Duplicate Textures",
+        description="Number of duplicate textures that can be optimized",
+        default=0
+    )
+    
+    # Duplicate materials count
+    bpy.types.Scene.publish_duplicate_material_count = IntProperty(
+        name="Duplicate Materials",
+        description="Number of duplicate materials that can be optimized",
+        default=0
+    )
 
 
 def toggle_all_libraries(context):
@@ -1301,6 +1345,12 @@ def unregister():
     bpy.utils.unregister_class(LibrarySelectionItem)
     
     # Delete scene properties
+    del bpy.types.Scene.publish_duplicate_material_count
+    del bpy.types.Scene.publish_duplicate_texture_count
+    del bpy.types.Scene.publish_empty_slots_count
+    del bpy.types.Scene.publish_transform_issue_count
+    del bpy.types.Scene.publish_highpoly_count
+    del bpy.types.Scene.publish_large_texture_count
     del bpy.types.Scene.publish_library_warnings
     del bpy.types.Scene.publish_library_errors
     del bpy.types.Scene.publish_library_count

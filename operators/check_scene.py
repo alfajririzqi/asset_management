@@ -81,11 +81,47 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             self._is_running = False
 
     def _create_text_datablocks_main_thread(self):
+        """Create text datablocks and optionally save to files"""
         for report in self._reports_data.get('reports', []):
+            # Create text datablock
             if report['name'] in bpy.data.texts:
                 bpy.data.texts.remove(bpy.data.texts[report['name']])
             text = bpy.data.texts.new(report['name'])
             text.write(report['content'])
+        
+        # Auto-save to file if enabled in preferences
+        try:
+            prefs = bpy.context.preferences.addons[__package__.split('.')[0]].preferences
+            if prefs.analysis_auto_save:
+                self._save_reports_to_file()
+        except Exception as e:
+            print(f"Auto-save reports warning: {e}")
+    
+    def _save_reports_to_file(self):
+        """Save reports to /reports folder in blend file directory"""
+        import os
+        
+        if not bpy.data.filepath:
+            return
+        
+        # Create reports folder
+        blend_dir = os.path.dirname(bpy.data.filepath)
+        reports_dir = os.path.join(blend_dir, "reports")
+        
+        if not os.path.exists(reports_dir):
+            os.makedirs(reports_dir)
+        
+        # Save each report as .txt file (overwrite)
+        for report in self._reports_data.get('reports', []):
+            filename = f"{report['name']}.txt"
+            filepath = os.path.join(reports_dir, filename)
+            
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(report['content'])
+                print(f"Saved report: {filepath}")
+            except Exception as e:
+                print(f"Failed to save {filename}: {e}")
 
     def _generate_texture_paths_report(self):
         """Generate texture paths report with resolution and relative/absolute paths"""
@@ -773,27 +809,30 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
             col = box.column(align=True)
             col.scale_y = 0.7
             
-            # Skip header and show first few materials
+            # Skip header and show first few materials (both horizontal and vertical formats)
             preview_count = 0
             start_showing = False
             skipped_lines = 0
+            max_preview_lines = 10  # Maximum lines to preview in dialog
             
             for i, line in enumerate(lines):
                 if not start_showing:
-                    if line.startswith("-" * 10):  # Divider after stats
+                    if line.startswith("=== CURRENT FILE ==="):
                         start_showing = True
-                        skipped_lines = i + 2
+                        skipped_lines = i
                     continue
                 
-                if preview_count < 10:
-                    col.label(text=line)
-                    preview_count += 1
+                if preview_count < max_preview_lines:
+                    # Show line if it's not empty or if it's a separator
+                    if line.strip() or preview_count == 0:
+                        col.label(text=line)
+                        preview_count += 1
                 else:
                     break
             
             # Show "more lines" indicator
-            if len(lines) - skipped_lines > 10:
-                remaining = len(lines) - skipped_lines - 10
+            if len(lines) - skipped_lines > max_preview_lines:
+                remaining = len(lines) - skipped_lines - max_preview_lines
                 box.separator()
                 row = box.row()
                 row.label(text=f"... {remaining} more lines", icon='THREE_DOTS')
@@ -812,27 +851,30 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
             col = box.column(align=True)
             col.scale_y = 0.7
             
-            # Skip header and show first few textures
+            # Skip header and show first few textures (both horizontal and vertical formats)
             preview_count = 0
             start_showing = False
             skipped_lines = 0
+            max_preview_lines = 10  # Maximum lines to preview in dialog
             
             for i, line in enumerate(lines):
                 if not start_showing:
-                    if line.startswith("-" * 10):  # Divider after stats
+                    if line.startswith("=== CURRENT FILE ==="):
                         start_showing = True
-                        skipped_lines = i + 2
+                        skipped_lines = i
                     continue
                 
-                if preview_count < 10:
-                    col.label(text=line)
-                    preview_count += 1
+                if preview_count < max_preview_lines:
+                    # Show line if it's not empty or if it's a separator
+                    if line.strip() or preview_count == 0:
+                        col.label(text=line)
+                        preview_count += 1
                 else:
                     break
             
             # Show "more lines" indicator
-            if len(lines) - skipped_lines > 10:
-                remaining = len(lines) - skipped_lines - 10
+            if len(lines) - skipped_lines > max_preview_lines:
+                remaining = len(lines) - skipped_lines - max_preview_lines
                 box.separator()
                 row = box.row()
                 row.label(text=f"... {remaining} more lines", icon='THREE_DOTS')
@@ -851,28 +893,30 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
             col = box.column(align=True)
             col.scale_y = 0.7
             
-            # Skip stats and show first section
+            # Skip stats and show first section (any format)
             preview_count = 0
             start_showing = False
             skipped_lines = 0
+            max_preview_lines = 10  # Maximum lines to preview in dialog
             
             for i, line in enumerate(lines):
                 if not start_showing:
-                    if line.startswith("[FOUND]") or line.startswith("[LINKED") or line.startswith("[MISSING]"):
+                    if line.startswith("=== CURRENT FILE ==="):
                         start_showing = True
                         skipped_lines = i
-                    else:
-                        continue
+                    continue
                 
-                if preview_count < 10:
-                    col.label(text=line)
-                    preview_count += 1
+                if preview_count < max_preview_lines:
+                    # Show line if it's not empty or if it's a separator
+                    if line.strip() or preview_count == 0:
+                        col.label(text=line)
+                        preview_count += 1
                 else:
                     break
             
             # Show "more lines" indicator
-            if len(lines) - skipped_lines > 10:
-                remaining = len(lines) - skipped_lines - 10
+            if len(lines) - skipped_lines > max_preview_lines:
+                remaining = len(lines) - skipped_lines - max_preview_lines
                 box.separator()
                 row = box.row()
                 row.label(text=f"... {remaining} more lines", icon='THREE_DOTS')

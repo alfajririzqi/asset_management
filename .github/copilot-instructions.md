@@ -290,6 +290,98 @@ publish_packed_textures: IntProperty
 publish_orphan_count: IntProperty
 ```
 
+## ⚙️ Addon Preferences System
+
+### Preferences Structure (`__init__.py`)
+```python
+class AssetManagementPreferences(AddonPreferences):
+    # Default Paths
+    default_publish_path: StringProperty  # Auto-loaded on file open
+    
+    # Validation Thresholds
+    highpoly_default_threshold: IntProperty(default=10000)  # Polygon count limit (always checked)
+    check_texture_resolution: BoolProperty(default=True)
+    max_texture_resolution: EnumProperty(default='4096')  # 1K/2K/4K/8K
+    
+    # Validation Checks (Enable/Disable)
+    check_transform_issues: BoolProperty(default=True)
+    check_empty_material_slots: BoolProperty(default=False)
+    check_duplicate_textures: BoolProperty(default=True)
+    check_duplicate_materials: BoolProperty(default=True)
+    
+    # Scene Analysis
+    analysis_auto_save: BoolProperty(default=False)  # Opt-in
+```
+
+### Auto-Load Pattern
+```python
+# In app handler: reset_publish_validation_on_load()
+if not context.scene.publish_path and prefs.default_publish_path:
+    context.scene.publish_path = prefs.default_publish_path
+```
+
+### Texture Resolution Check Logic
+**CRITICAL:** Operator `>` (greater than), BUKAN `>=`
+```python
+max_res = int(prefs.max_texture_resolution)
+if img.size[0] > max_res or img.size[1] > max_res:
+    large_texture_count += 1
+
+# Example: max_res = 2048 (2K)
+# - Texture 2048x2048 → IGNORED (2048 = 2048, not greater)
+# - Texture 4096x4096 → WARNING (4096 > 2048)
+```
+
+**Validation Checks Matching Tools:**
+- ✅ High Poly Objects → Tool: `check_highpoly.py` (always checked, uses threshold from preferences)
+- ✅ Transform Issues → Tool: `check_transform.py` (Apply All Transforms)
+- ✅ Empty Material Slots → Tool: `clear_material_slots.py`
+- ✅ Duplicate Textures → Tool: `optimize_textures.py`
+- ✅ Duplicate Materials → Tool: `optimize_materials.py`
+- ✅ Large Textures → Tool: `downgrade_resolution.py`
+- ✅ External Textures → Tool: `consolidate_textures.py`
+- ✅ Orphan Data → Tool: `clear_orphan_data.py`
+
+## 📚 Linked Libraries Workflow
+
+### Dependency Chain (CRITICAL ORDER)
+```
+1. Run "Check Publish Readiness" (ASSET_OT_CheckPublish)
+   ↓ Enables checkbox
+2. Centang "Publish Linked Libraries" (publish_include_libraries)
+   ↓ Shows scan button
+3. Klik "Scan & Validate Libraries" (ASSET_OT_ValidateLibraries)
+   ↓ NO publish_path required!
+4. Validation results displayed
+```
+
+### Library Scan Logic (NO publish_path Required)
+```python
+# ❌ WRONG - Old logic required publish_path
+scanner = LinkedLibraryScanner(publish_path, max_depth=3)
+
+# ✅ CORRECT - Direct scan from bpy.data
+libraries = list(bpy.data.libraries)
+for lib in libraries:
+    lib_filepath = bpy.path.abspath(lib.filepath)
+    # Check: exists, readable, has textures folder
+```
+
+**Why NO publish_path:**
+- Checkbox depends on `publish_check_done`, NOT `publish_path`
+- Scan only needs current blend file's linked libraries
+- Publish_path only needed for ACTUAL PUBLISH, not validation
+
+### UI Enable Logic (publish_panel.py)
+```python
+# Checkbox disabled if:
+if scene.publish_is_published_file:
+    row.enabled = False  # Published file
+elif not scene.publish_check_done:
+    row.enabled = False  # Pre-publish not run yet
+    # Show: "Run 'Check Publish Readiness' first"
+```
+
 ## 🚀 Development Workflow
 
 ### Making Changes
@@ -305,6 +397,8 @@ publish_orphan_count: IntProperty
 - 🔄 **Avoid Circular Imports:** Use utils/ for shared code
 - 🎨 **Consistent UI:** Individual row alerts, inline warnings
 - 📝 **Single Source of Truth:** One .publish_activity.log
+- 🎯 **Validation Matches Tools:** Every check must have solving tool
+- 🔗 **Library Scan Independence:** No publish_path for validation
 
 ## 🐛 Known Issues & Solutions
 
@@ -325,8 +419,33 @@ publish_orphan_count: IntProperty
 1. Clear `_publish_detection_cached` attribute
 2. Check log format matches: `Path: {path} | Source: {source}`
 
+## 📝 Recent Conversations & Decisions
+
+### 2025-11-09: Addon Preferences & Validation System Overhaul
+
+**Context:** User requested professional addon preferences with validation customization.
+
+**Key Decisions:**
+1. **Auto-Load Pattern:** Preferences auto-populate scene properties on file open (NO manual "Load" button)
+2. **Texture Resolution:** Dynamic threshold (1K/2K/4K/8K dropdown), check uses `>` operator (strict greater than)
+3. **Validation Philosophy:** Every check must match existing tool (e.g., high poly → check_highpoly.py)
+4. **Library Scan Logic:** NO publish_path required - checkbox depends on `publish_check_done` only
+5. **Scene Analysis:** Opt-in auto-save (default False), plain text format, always overwrite
+
+**Critical Learning:**
+- User emphasized: "CHECKBOX publish lib hanya bisa dicentang setelah run pre-publish validasi"
+- Dependency chain: Pre-publish → Checkbox → Scan (NOT: Publish_path → Scan)
+- Texture check: `if size > max_res` (NOT `>=`), so 2048px texture with 2K limit = IGNORED
+
+**Files Modified:**
+- `__init__.py`: Added 6 new preference properties
+- `operators/check_publish.py`: 5 new validation checks, library scan rewrite
+- `operators/publish.py`: 5 new scene properties registered
+- `panels/publish_panel.py`: Checkbox disable logic, validation results display
+- `operators/check_scene.py`: Auto-save reports feature
+
 ---
 
-**Last Updated:** 2025-10-30  
+**Last Updated:** 2025-11-09  
 **Blender Version:** 4.0+  
 **Python Version:** 3.10+
