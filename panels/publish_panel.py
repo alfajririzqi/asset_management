@@ -28,7 +28,6 @@ class ASSET_PT_Publish(bpy.types.Panel):
         
         # Show validation results if check has been run
         if scene.publish_check_done:
-            layout.separator()
             
             # Published File Warning (if detected)
             if scene.publish_is_published_file:
@@ -42,10 +41,8 @@ class ASSET_PT_Publish(bpy.types.Panel):
                 col.label(text="Cannot publish from publish directory!", icon='BLANK1')
                 col.label(text="This prevents recursive versioning (v001_v001)", icon='BLANK1')
                 
-                layout.separator()
             
             # Validation Results
-            layout.separator()
             result_box = layout.box()
             result_box.label(text="Validation Results:", icon='PRESET_NEW')
             col = result_box.column(align=True)
@@ -92,15 +89,6 @@ class ASSET_PT_Publish(bpy.types.Panel):
                 else:
                     col.label(text=f"{scene.publish_packed_count} packed textures", icon='INFO')
             
-            # Orphan data
-            if scene.publish_orphan_count > 0:
-                if not scene.publish_force:
-                    row = col.row()
-                    row.alert = True
-                    row.label(text=f"{scene.publish_orphan_count} orphan data blocks", icon='ERROR')
-                else:
-                    col.label(text=f"{scene.publish_orphan_count} orphan data blocks", icon='INFO')
-            
             # Large textures warning (if enabled in preferences)
             if hasattr(scene, 'publish_large_texture_count') and scene.publish_large_texture_count > 0:
                 # Get max resolution from preferences for display
@@ -123,15 +111,6 @@ class ASSET_PT_Publish(bpy.types.Panel):
                     col.label(text=f"{scene.publish_large_texture_count} textures exceed {max_res_label} resolution", icon='INFO')
             
             # ===== NEW VALIDATION CHECKS =====
-            
-            # High poly objects
-            if hasattr(scene, 'publish_highpoly_count') and scene.publish_highpoly_count > 0:
-                if not scene.publish_force:
-                    row = col.row()
-                    row.alert = True
-                    row.label(text=f"{scene.publish_highpoly_count} high poly objects (Tools: Check High Poly)", icon='ERROR')
-                else:
-                    col.label(text=f"{scene.publish_highpoly_count} high poly objects", icon='INFO')
             
             # Transform issues
             if hasattr(scene, 'publish_transform_issue_count') and scene.publish_transform_issue_count > 0:
@@ -171,7 +150,6 @@ class ASSET_PT_Publish(bpy.types.Panel):
             
             # Force Publish option (if has warnings)
             if scene.publish_has_warnings:
-                layout.separator()
                 force_box = layout.box()
                 force_box.prop(scene, "publish_force", text="Force Publish (ignore warnings)", icon='ERROR')
                 
@@ -180,9 +158,7 @@ class ASSET_PT_Publish(bpy.types.Panel):
                     info_col.scale_y = 0.7
                     info_col.label(text="⚠️ All warnings will be ignored", icon='BLANK1')
                     info_col.label(text="⚠️ You take full responsibility", icon='BLANK1')
-        
-        layout.separator()
-        
+                
         # ====================================================================
         # LINKED LIBRARIES SECTION
         # ====================================================================
@@ -208,14 +184,7 @@ class ASSET_PT_Publish(bpy.types.Panel):
         
         # Only show library details if enabled
         if scene.publish_include_libraries:
-            library_box.separator(factor=0.5)
-            
-            # Validate button
-            row = library_box.row()
-            row.scale_y = 1.2
-            row.operator("asset.validate_libraries", text="Scan & Validate Libraries", icon='VIEWZOOM')
-            
-            # Show validation results if validated
+            # Show validation results (auto-validated when checkbox enabled)
             if scene.publish_libraries_validated:
                 library_box.separator(factor=0.5)
                 
@@ -251,11 +220,8 @@ class ASSET_PT_Publish(bpy.types.Panel):
                     lib_list_box.label(text="Library Selection:", icon='OUTLINER')
                     
                     for item in scene.publish_library_selection:
-                        # Indentation based on depth
+                        # Main row for checkbox and name
                         row = lib_list_box.row(align=True)
-                        
-                        # Add indent spaces (visual hierarchy)
-                        indent = "  " * (item.depth - 1) if item.depth > 1 else ""
                         
                         # Checkbox
                         checkbox_col = row.column()
@@ -264,31 +230,37 @@ class ASSET_PT_Publish(bpy.types.Panel):
                         if scene.publish_is_published_file:
                             checkbox_col.enabled = False
                         
-                        # Library name with depth indicator
-                        depth_icon = 'OUTLINER_OB_MESH' if item.depth == 1 else 'DOT'
-                        label_text = f"{indent}{item.folder_name}"
+                        # Library name with status icon
+                        has_error = "ERROR" in item.status
+                        has_warning = "WARNING" in item.status
                         
-                        # Color based on status
-                        if "ERROR" in item.status:
-                            col = row.column()
-                            col.alert = True
-                            col.label(text=label_text, icon='ERROR')
-                        elif "WARNING" in item.status:
-                            col = row.column()
-                            col.alert = True
-                            col.label(text=label_text, icon='INFO')
+                        if has_error:
+                            status_icon = 'ERROR'
+                        elif has_warning:
+                            status_icon = 'INFO'
                         else:
-                            row.label(text=label_text, icon=depth_icon)
+                            status_icon = 'CHECKMARK'
                         
-                        # Action buttons (right side)
+                        # Show folder name with structure info
+                        if item.structure and item.structure != "_external":
+                            label_text = f"{item.folder_name} ({item.structure})"
+                        else:
+                            label_text = f"{item.folder_name}"
+                        
+                        # Create a dummy operator for tooltip (shows full path on hover)
+                        name_col = row.column()
+                        if has_error or has_warning:
+                            name_col.alert = True
+                        
+                        # Use operator button (emboss=False) to show tooltip with full path
+                        op = name_col.operator("asset.copy_library_path", text=label_text, icon=status_icon, emboss=False)
+                        op.library_path = item.filepath
+                        op.library_name = item.folder_name
+                        
+                        # Action buttons (right side) - SWITCHED ORDER: Open first, then Reload
                         row.separator()
                         
-                        # Copy path button
-                        copy_op = row.operator("asset.copy_library_path", text="", icon='COPYDOWN', emboss=False)
-                        copy_op.library_path = item.filepath
-                        copy_op.library_name = item.folder_name
-                        
-                        # Open file button (only if file exists)
+                        # Open file button (only if file exists) - NOW FIRST
                         if os.path.exists(item.filepath):
                             open_op = row.operator("asset.open_library_file", text="", icon='FILE_BLEND', emboss=False)
                             open_op.library_path = item.filepath
@@ -298,11 +270,43 @@ class ASSET_PT_Publish(bpy.types.Panel):
                             disabled_col.enabled = False
                             disabled_col.label(text="", icon='QUESTION')
                         
-                        # Show status on hover (via sublabel)
+                        # Reload library button - NOW SECOND (use custom operator)
+                        if os.path.exists(item.filepath):
+                            # Find the library object to reload - normalize paths for comparison
+                            lib_to_reload = None
+                            item_path_norm = os.path.normpath(os.path.abspath(item.filepath))
+                            
+                            for lib in bpy.data.libraries:
+                                lib_path_abs = bpy.path.abspath(lib.filepath)
+                                lib_path_norm = os.path.normpath(os.path.abspath(lib_path_abs))
+                                
+                                if lib_path_norm == item_path_norm:
+                                    lib_to_reload = lib
+                                    break
+                            
+                            if lib_to_reload:
+                                reload_op = row.operator("asset.reload_library", text="", icon='FILE_REFRESH', emboss=False)
+                                reload_op.library_path = item.filepath
+                            else:
+                                # Library not loaded, show disabled icon
+                                disabled_col = row.column()
+                                disabled_col.enabled = False
+                                disabled_col.label(text="", icon='FILE_REFRESH')
+                        else:
+                            # File missing, show disabled icon
+                            disabled_col = row.column()
+                            disabled_col.enabled = False
+                            disabled_col.label(text="", icon='FILE_REFRESH')
+                        
+                        # Show status details below (for errors/warnings)
                         if item.status and item.status != "OK":
-                            status_row = lib_list_box.row()
-                            status_row.scale_y = 0.6
-                            status_row.label(text=f"    └─ {item.status}", icon='BLANK1')
+                            # Split status by line breaks if multiple messages
+                            status_messages = item.status.split(';')
+                            
+                            for msg in status_messages:
+                                status_row = lib_list_box.row()
+                                status_row.scale_y = 0.7
+                                status_row.label(text=f"  └─ {msg.strip()}", icon='BLANK1')
                 
                 # No libraries found message
                 elif scene.publish_library_count == 0 and scene.publish_library_errors == 0:
@@ -310,8 +314,6 @@ class ASSET_PT_Publish(bpy.types.Panel):
                     info_row.scale_y = 0.8
                     info_row.label(text="No linked libraries detected", icon='INFO')
         
-        layout.separator()
-
         # Publish Settings
         publish_box = layout.box()
         publish_box.label(text="Settings:", icon='SETTINGS')
@@ -325,27 +327,10 @@ class ASSET_PT_Publish(bpy.types.Panel):
         col.separator(factor=0.5)
         col.label(text="Mode:", icon='MOD_BUILD')
         
-        # Check if master file exists (required for versioning)
-        master_exists = False
-        if scene.publish_path and bpy.data.filepath:
-            blend_dir = os.path.dirname(bpy.data.filepath)
-            asset_name = os.path.basename(blend_dir)
-            master_path = os.path.join(scene.publish_path, f"{asset_name}.blend")
-            master_exists = os.path.exists(master_path)
-        
-        # Grid layout for toggle buttons
+        # Grid layout for toggle buttons (both always enabled)
         row = col.row(align=True)
         row.prop_enum(scene, "publish_versioning_mode", 'OVERWRITE', text="Overwrite", icon='FILE_REFRESH')
-        
-        # Disable versioning if no master exists
-        versioning_col = row.column()
-        versioning_col.prop_enum(scene, "publish_versioning_mode", 'VERSIONING', text="Versioning", icon='LINENUMBERS_ON')
-        if not master_exists:
-            versioning_col.enabled = False
-            # Show tooltip explanation
-            help_row = col.row()
-            help_row.scale_y = 0.7
-            help_row.label(text="Versioning requires master file (publish with Overwrite first)", icon='INFO')
+        row.prop_enum(scene, "publish_versioning_mode", 'VERSIONING', text="Versioning", icon='LINENUMBERS_ON')
         
         # Preview target path
         if scene.publish_path and bpy.data.filepath:

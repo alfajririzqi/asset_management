@@ -12,11 +12,9 @@ class ASSET_OT_check_transform(bpy.types.Operator):
     BACKGROUND_COLOR = (0.2, 0.25, 0.28)  # Dark blue-gray (different from high poly)
 
     def execute(self, context):
-        # Auto-exit other analysis modes first
         if hasattr(context.scene, "highpoly_mode_active") and context.scene.highpoly_mode_active:
             bpy.ops.asset.exit_highpoly()
         
-        # Force Solid viewport shading for accurate analysis
         for area in context.screen.areas:
             if area.type == 'VIEW_3D':
                 for space in area.spaces:
@@ -24,7 +22,6 @@ class ASSET_OT_check_transform(bpy.types.Operator):
                         if space.shading.type != 'SOLID':
                             space.shading.type = 'SOLID'
         
-        # Store original viewport settings
         for area in context.screen.areas:
             if area.type != 'VIEW_3D':
                 continue
@@ -38,7 +35,6 @@ class ASSET_OT_check_transform(bpy.types.Operator):
                 if not hasattr(context.scene, "transform_original_color_type"):
                     context.scene.transform_original_color_type = space.shading.color_type
         
-        # Set viewport for transform analysis
         for area in context.screen.areas:
             if area.type != 'VIEW_3D':
                 continue
@@ -54,31 +50,25 @@ class ASSET_OT_check_transform(bpy.types.Operator):
         extreme_scale_count = 0
         unapplied_rotation_count = 0
         
-        # Reset all objects first
         for obj in context.scene.objects:
             if obj.type != 'MESH':
                 continue
             obj.color = (1.0, 1.0, 1.0, 1.0)
-            # Clean up previous markers
             if "_transform_issue" in obj:
                 del obj["_transform_issue"]
             if "_transform_type" in obj:
                 del obj["_transform_type"]
         
-        # Only check objects in active view layer (not hidden collections)
         objects_to_check = [obj for obj in context.view_layer.objects if obj.type == 'MESH']
         
-        # Count hidden objects for info display
         hidden_count = len([obj for obj in context.scene.objects if obj.type == 'MESH']) - len(objects_to_check)
         
-        # Check each mesh object
         for obj in objects_to_check:
             
             has_issue = False
             issue_type = []
-            severity = 0  # 1=yellow, 2=orange, 3=red
+            severity = 0  
             
-            # Check for unapplied scale (not 1.0, 1.0, 1.0)
             scale = obj.scale
             if not (abs(scale.x - 1.0) < 0.0001 and 
                    abs(scale.y - 1.0) < 0.0001 and 
@@ -86,24 +76,21 @@ class ASSET_OT_check_transform(bpy.types.Operator):
                 issue_type.append("Unapplied Scale")
                 unapplied_scale_count += 1
                 has_issue = True
-                severity = max(severity, 2)  # Orange
+                severity = max(severity, 2)  
                 
-                # Check non-uniform scale
                 if not (abs(scale.x - scale.y) < 0.0001 and 
                        abs(scale.y - scale.z) < 0.0001):
                     issue_type.append("Non-uniform Scale")
                     non_uniform_scale_count += 1
-                    severity = max(severity, 2)  # Orange
+                    severity = max(severity, 2) 
                 
-                # Check extreme scale
                 min_scale = min(abs(scale.x), abs(scale.y), abs(scale.z))
                 max_scale = max(abs(scale.x), abs(scale.y), abs(scale.z))
                 if min_scale < 0.01 or max_scale > 100:
                     issue_type.append("Extreme Scale")
                     extreme_scale_count += 1
-                    severity = max(severity, 3)  # Red
+                    severity = max(severity, 3)  
             
-            # Check for unapplied rotation (not 0, 0, 0)
             rot = obj.rotation_euler
             if not (abs(rot.x) < 0.0001 and 
                    abs(rot.y) < 0.0001 and 
@@ -111,9 +98,8 @@ class ASSET_OT_check_transform(bpy.types.Operator):
                 issue_type.append("Unapplied Rotation")
                 unapplied_rotation_count += 1
                 has_issue = True
-                severity = max(severity, 1)  # Yellow
+                severity = max(severity, 1) 
             
-            # Mark object if has issues
             if has_issue:
                 obj["_transform_issue"] = True
                 obj["_transform_type"] = ", ".join(issue_type)
@@ -127,7 +113,6 @@ class ASSET_OT_check_transform(bpy.types.Operator):
                 else:
                     obj.color = (1.0, 1.0, 0.0, 1.0)  # Yellow - Info
         
-        # Set viewport to object color mode
         for area in context.screen.areas:
             if area.type != 'VIEW_3D':
                 continue
@@ -185,14 +170,12 @@ class ASSET_OT_select_transform_issues(bpy.types.Operator):
         
         bpy.ops.object.select_all(action='DESELECT')
         
-        # Select objects with transform issues (only if in active view layer)
         view_layer_objects = context.view_layer.objects
         for obj in context.scene.objects:
             if obj.type == 'MESH' and "_transform_issue" in obj:
                 # Check if object is in active view layer
                 if obj.name in view_layer_objects:
                     try:
-                        # Temporarily unhide if hidden
                         was_hidden = obj.hide_get()
                         if was_hidden:
                             obj.hide_set(False)
@@ -221,13 +204,12 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
     bl_description = "Apply scale and rotation to selected objects (WARNING: Cannot undo!)"
     bl_options = {'REGISTER', 'UNDO'}
     
-    # Modifier safety classification
     DANGEROUS_MODIFIERS = {
         'MIRROR', 'ARRAY', 'BEVEL', 'SOLIDIFY', 'SCREW', 
         'LATTICE', 'ARMATURE', 'CURVE', 'SHRINKWRAP', 
         'SIMPLE_DEFORM', 'CAST', 'HOOK', 'LAPLACIANDEFORM',
         'SURFACE_DEFORM', 'WARP', 'WAVE', 'BOOLEAN',
-        'NODES'  # Geometry Nodes can be unpredictable
+        'NODES'
     }
     
     SAFE_MODIFIERS = {
@@ -250,17 +232,14 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
             if obj.type != 'MESH':
                 continue
             
-            # Check if object has ARMATURE (rigged - will be skipped)
             has_armature = any(mod.type == 'ARMATURE' for mod in obj.modifiers)
             
             dangerous_mods = []
             for mod in obj.modifiers:
-                # Include dangerous modifiers EXCEPT ARMATURE
                 if mod.type in self.DANGEROUS_MODIFIERS and mod.type != 'ARMATURE':
                     dangerous_mods.append(f"{mod.name} ({mod.type})")
             
             if dangerous_mods:
-                # Add note if object has armature (will be skipped)
                 if has_armature:
                     danger_report[obj.name + " [RIGGED - WILL BE SKIPPED]"] = dangerous_mods
                 else:
@@ -274,24 +253,20 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
             self.report({'WARNING'}, "No mesh objects selected")
             return {'CANCELLED'}
         
-        # CRITICAL: Check for dangerous modifiers (excluding ARMATURE)
         has_danger, danger_report = self._check_transform_safety(selected)
         
         if has_danger:
-            # Store danger report in scene for dialog access
             context.scene.transform_danger_report = str(danger_report)
             
-            # Show dialog popup instead of blocking
             return context.window_manager.invoke_props_dialog(self, width=500)
         
-        # Safe to proceed - show normal confirmation
         return context.window_manager.invoke_confirm(self, event)
     
     def draw(self, context):
         """Draw dialog when dangerous modifiers detected."""
         layout = self.layout
         
-        # Check if we have danger report
+
         if hasattr(context.scene, 'transform_danger_report') and context.scene.transform_danger_report:
             import ast
             try:
@@ -308,11 +283,9 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
                 
                 layout.separator()
                 
-                # List objects with grid layout (2 columns)
                 obj_box = layout.box()
                 obj_box.label(text="Objects with risky modifiers:", icon='INFO')
                 
-                # Use grid for object names (2 columns)
                 grid = obj_box.grid_flow(row_major=True, columns=2, align=True)
                 grid.scale_y = 0.8
                 
@@ -320,7 +293,6 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
                 obj_items = list(danger_report.items())[:max_display]
                 
                 for obj_name, mod_list in obj_items:
-                    # Show object name with modifier count
                     mod_count = len(mod_list)
                     grid.label(text=f"• {obj_name} ({mod_count} mods)", icon='OBJECT_DATA')
                 
@@ -343,17 +315,14 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
                 layout.separator()
                 layout.label(text="Proceed with auto-workflow?", icon='QUESTION')
         else:
-            # Normal confirmation
             layout.label(text="Apply transforms to selected objects?", icon='QUESTION')
 
     def execute(self, context):
         selected = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
-        # Check if we need auto-workflow (dangerous modifiers detected)
         has_danger, danger_report = self._check_transform_safety(selected)
         
         if has_danger:
-            # AUTO-WORKFLOW: Backup → Apply Modifiers → Apply Transforms
             print("\n" + "="*70)
             print("🔧 AUTO-WORKFLOW: Dangerous Modifiers Detected")
             print("="*70)
@@ -364,17 +333,14 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
             
             backup_count = 0
             for obj in selected:
-                # Skip if object has ARMATURE modifier (rigged objects protected)
                 if self._has_armature_modifier(obj):
                     print(f"  ⚠ SKIPPED {obj.name} - Has ARMATURE (rigged object protected)")
                     continue
                 
-                # Create backup
                 obj_copy = obj.copy()
                 obj_copy.data = obj.data.copy()
                 obj_copy.name = f"{obj.name}_backup"
                 
-                # Link to .temp collection (collection is excluded from view layer, so objects auto-hidden)
                 temp_collection.objects.link(obj_copy)
                 
                 backup_count += 1
@@ -387,23 +353,19 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
             modifiers_applied = 0
             
             for obj in selected:
-                # Skip if has ARMATURE
                 if self._has_armature_modifier(obj):
                     continue
                 
-                # Find dangerous modifiers (excluding ARMATURE)
                 dangerous_mods = []
                 for mod in obj.modifiers:
                     if mod.type in self.DANGEROUS_MODIFIERS and mod.type != 'ARMATURE':
                         dangerous_mods.append(mod.name)
                 
                 if dangerous_mods:
-                    # Set as active to apply modifiers
                     bpy.ops.object.select_all(action='DESELECT')
                     obj.select_set(True)
                     context.view_layer.objects.active = obj
                     
-                    # Apply each dangerous modifier
                     for mod_name in dangerous_mods:
                         try:
                             mod = obj.modifiers.get(mod_name)
@@ -421,7 +383,6 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
             applied_count = 0
             
             for obj in selected:
-                # Skip if has ARMATURE
                 if self._has_armature_modifier(obj):
                     continue
                 
@@ -439,15 +400,12 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
             print(f"\n✅ Applied transforms to {applied_count} objects")
             print("="*70 + "\n")
             
-            # Clear danger report
             context.scene.transform_danger_report = ""
             
-            # Restore selection
             bpy.ops.object.select_all(action='DESELECT')
             for obj in selected:
                 obj.select_set(True)
             
-            # Refresh analysis
             if context.scene.transform_mode_active:
                 bpy.ops.asset.refresh_transform()
             
@@ -455,7 +413,6 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
             return {'FINISHED'}
         
         else:
-            # NORMAL WORKFLOW: No dangerous modifiers, just apply transforms
             applied_count = 0
             
             for obj in context.selected_objects:
@@ -488,7 +445,6 @@ class ASSET_OT_apply_all_transforms(bpy.types.Operator):
             temp_collection = bpy.data.collections.new(".temp")
             context.scene.collection.children.link(temp_collection)
             
-            # Exclude from view layer (this hides all objects in collection)
             layer_collection = context.view_layer.layer_collection.children.get(".temp")
             if layer_collection:
                 layer_collection.exclude = True
@@ -511,7 +467,6 @@ class ASSET_OT_exit_transform(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     def execute(self, context):
-        # Reset object colors
         for obj in context.scene.objects:
             if obj.type != 'MESH':
                 continue
@@ -521,7 +476,6 @@ class ASSET_OT_exit_transform(bpy.types.Operator):
             if "_transform_type" in obj:
                 del obj["_transform_type"]
         
-        # Reset viewport settings
         for area in context.screen.areas:
             if area.type != 'VIEW_3D':
                 continue
@@ -572,7 +526,6 @@ def register():
         default=0,
     )
     
-    # Viewport state storage
     bpy.types.Scene.transform_original_bg = bpy.props.FloatVectorProperty(
         name="Original Background Color",
         size=3,
@@ -582,12 +535,10 @@ def register():
     bpy.types.Scene.transform_original_type = bpy.props.StringProperty(default='THEME')
     bpy.types.Scene.transform_original_color_type = bpy.props.StringProperty(default='MATERIAL')
     
-    # Danger report for dialog
     bpy.types.Scene.transform_danger_report = bpy.props.StringProperty(default="")
 
 
 def unregister():
-    # Clean up scene properties
     if hasattr(bpy.types.Scene, "transform_danger_report"):
         del bpy.types.Scene.transform_danger_report
     if hasattr(bpy.types.Scene, "transform_original_color_type"):

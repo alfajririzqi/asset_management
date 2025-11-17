@@ -28,11 +28,9 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
         return tris
 
     def execute(self, context):
-        # Auto-exit other analysis modes first
         if hasattr(context.scene, "transform_mode_active") and context.scene.transform_mode_active:
             bpy.ops.asset.exit_transform()
         
-        # Force Solid viewport shading for accurate analysis
         for area in context.screen.areas:
             if area.type == 'VIEW_3D':
                 for space in area.spaces:
@@ -42,7 +40,6 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
         
         high_poly_count = 0
 
-        # Store original viewport settings (only if not already stored)
         for area in context.screen.areas:
             if area.type != 'VIEW_3D':
                 continue
@@ -53,11 +50,9 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
                     context.scene.highpoly_original_bg = space.shading.background_color[:3]
                 if not hasattr(context.scene, "highpoly_original_type"):
                     context.scene.highpoly_original_type = space.shading.background_type
-                # Always store current color type (might be changed by other mode)
                 if not hasattr(context.scene, "highpoly_original_color_type"):
                     context.scene.highpoly_original_color_type = space.shading.color_type
 
-        # Set viewport for high poly analysis
         for area in context.screen.areas:
             if area.type != 'VIEW_3D':
                 continue
@@ -84,7 +79,6 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
                 if area.type == 'VIEW_3D':
                     area.tag_redraw()
 
-        # Reset all objects first
         for obj in context.scene.objects:
             if obj.type != 'MESH':
                 continue
@@ -94,10 +88,8 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
             if "_tris_count" in obj:
                 del obj["_tris_count"]
 
-        # Only check objects in active view layer (not hidden collections)
         objects_to_check = [obj for obj in context.view_layer.objects if obj.type == 'MESH']
         
-        # Count hidden objects for info display
         hidden_count = len([obj for obj in context.scene.objects if obj.type == 'MESH']) - len(objects_to_check)
 
         for obj in objects_to_check:
@@ -118,7 +110,6 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
 
         context.scene.highpoly_mode_active = True
         
-        # Store statistics including hidden count
         context.scene.highpoly_hidden_skipped = hidden_count
 
         self.report(
@@ -136,7 +127,6 @@ class ASSET_OT_refresh_highpoly(bpy.types.Operator):
     bl_options = {'REGISTER'}
 
     def execute(self, context):
-        # Simply re-run the check operator
         bpy.ops.asset.check_highpoly()
         self.report({'INFO'}, "High-poly analysis refreshed")
         return {'FINISHED'}
@@ -153,17 +143,13 @@ class ASSET_OT_select_highpoly(bpy.types.Operator):
         selected_count = 0
         unhidden_count = 0
         
-        # Deselect all first
         bpy.ops.object.select_all(action='DESELECT')
         
-        # Select high-poly objects (only if in active view layer)
         view_layer_objects = context.view_layer.objects
         for obj in context.scene.objects:
             if obj.type == 'MESH' and "_high_poly" in obj:
-                # Check if object is in active view layer
                 if obj.name in view_layer_objects:
                     try:
-                        # Temporarily unhide if hidden
                         was_hidden = obj.hide_get()
                         if was_hidden:
                             obj.hide_set(False)
@@ -221,7 +207,7 @@ class ASSET_OT_isolate_highpoly(bpy.types.Operator):
                 # Hide non-high-poly objects and mark them
                 if "_high_poly" not in obj:
                     obj.hide_set(True)
-                    obj["_isolated_by_highpoly"] = True  # Mark for restoration
+                    obj["_isolated_by_highpoly"] = True  
                     hidden_count += 1
             
             context.scene.highpoly_isolated = True

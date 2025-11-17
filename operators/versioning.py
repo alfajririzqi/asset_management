@@ -10,22 +10,31 @@ LOG_FILENAME = "versioning_activity.log"
 
 
 def get_version_list(self, context):
-    """Get list of version files for EnumProperty"""
+    """Get list of version files for EnumProperty (filtered by current blend name)"""
     fp = bpy.data.filepath
     if not fp:
         return []
     versions_dir = os.path.join(os.path.dirname(fp), "versions")
     if not os.path.exists(versions_dir):
         return []
+    
+    current_filename = os.path.basename(fp)
+    base_name = current_filename.replace('.blend', '')
+    
     items = []
-    blends = [f for f in os.listdir(versions_dir) if f.endswith('.blend')]
-    blends.sort(key=lambda f: os.path.getmtime(os.path.join(versions_dir, f)), reverse=True)
-    for idx, name in enumerate(blends):
+    all_blends = [f for f in os.listdir(versions_dir) if f.endswith('.blend')]
+    
+    matching_blends = [f for f in all_blends if f.startswith(base_name)]
+    
+    matching_blends.sort(key=lambda f: os.path.getmtime(os.path.join(versions_dir, f)), reverse=True)
+    
+    for idx, name in enumerate(matching_blends):
         label = name
         desc = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(
             os.path.getmtime(os.path.join(versions_dir, name))
         ))
         items.append((name, label, desc, idx))
+    
     return items if items else [('NONE', 'No versions', 'No versions available', 0)]
 
 
@@ -129,7 +138,6 @@ def manual_relink_images(main_filepath, textures_root):
     main_dir = os.path.dirname(main_filepath)
 
     for img in bpy.data.images:
-        # Skip Render Result and Viewer Node
         if img.name in ('Render Result', 'Viewer Node'):
             continue
         
@@ -148,7 +156,6 @@ def manual_relink_images(main_filepath, textures_root):
         if base_name in candidates:
             found_path = candidates[base_name][0]
         else:
-            # Try UDIM pattern matching
             name_no_ext, ext = os.path.splitext(base_name)
             import re
             m = re.match(r"^(.*)\.\d{3,4}$", name_no_ext)
@@ -194,16 +201,13 @@ class FILE_OT_SaveVersion(bpy.types.Operator):
             self.report({'ERROR'}, "Main file is not saved. Please save first.")
             return {'CANCELLED'}
         
-        # BLOCK: Prevent recursive versioning - check if file is already in versions folder
         current_dir = os.path.dirname(main_fp)
         parent_dir = os.path.dirname(current_dir)
         
-        # Check if current directory is named "versions"
         if os.path.basename(current_dir) == "versions":
             self.report({'ERROR'}, "Cannot create version from a version file! Open the original file instead.")
             return {'CANCELLED'}
         
-        # Check if file is inside any "versions" folder in path
         if "versions" + os.sep in main_fp or main_fp.endswith(os.sep + "versions"):
             self.report({'ERROR'}, "Cannot create version from a version file! Open the original file instead.")
             return {'CANCELLED'}
@@ -323,7 +327,6 @@ def unregister():
     bpy.utils.unregister_class(FILE_OT_RestoreVersion)
     bpy.utils.unregister_class(FILE_OT_SaveVersion)
     
-    # Unregister scene property
     try:
         del bpy.types.Scene.selected_version
     except Exception:

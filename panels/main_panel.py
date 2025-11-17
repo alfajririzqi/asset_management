@@ -176,7 +176,6 @@ class ASSET_ANALYSIS_PT_panel(bpy.types.Panel):
             analysis_box.label(text="Please restart Blender to load this add-on", icon='ERROR')
         
         # Transform Check Analysis
-        layout.separator()
         transform_box = layout.box()
         transform_box.label(text="Transform Check", icon='OBJECT_ORIGIN')
         
@@ -283,9 +282,7 @@ class ASSET_OPTIMIZATION_PT_panel(bpy.types.Panel):
         row.enabled = not is_published
         row.scale_y = 1.2
         row.operator("asset.optimize_texture_duplicates", text="Optimize Texture Duplicates", icon='TEXTURE')
-        
-        layout.separator()
-        
+                
         # ====================================================================
         # CLEANUP SECTION
         # ====================================================================
@@ -322,19 +319,9 @@ def register():
     register_icon()
     
     # High Poly Analysis settings
-    # Default value loaded from addon preferences (highpoly_default_threshold)
-    def get_highpoly_default():
-        """Get default threshold from addon preferences"""
-        try:
-            prefs = bpy.context.preferences.addons['asset_management'].preferences
-            return prefs.highpoly_default_threshold
-        except:
-            return 10000  # Fallback if preferences not available
-    
     bpy.types.Scene.highpoly_threshold = bpy.props.IntProperty(
-        default=10000,  # Matches preferences default
-        min=1,
-        max=10000000
+        default=50000,
+        min=1
     )
     
     bpy.types.Scene.highpoly_use_modifiers = bpy.props.BoolProperty(

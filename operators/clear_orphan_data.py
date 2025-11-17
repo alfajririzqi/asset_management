@@ -39,7 +39,6 @@ class SCENE_OT_ClearOrphanData(bpy.types.Operator):
                     icon = self._get_icon_for_datatype(data_type)
                     col.label(text=f"  • {data_type}: {count}", icon=icon)
             
-            # Show detailed list for Materials
             if self.orphan_stats.get('Materials', 0) > 0:
                 layout.separator()
                 mat_box = layout.box()
@@ -47,7 +46,7 @@ class SCENE_OT_ClearOrphanData(bpy.types.Operator):
                 
                 unused_materials = [mat.name for mat in bpy.data.materials if mat.users == 0]
                 
-                # Use grid layout (2 columns) for compact display
+                # Use grid layout
                 grid = mat_box.grid_flow(row_major=True, columns=2, align=True)
                 grid.scale_y = 0.8
                 
@@ -55,7 +54,6 @@ class SCENE_OT_ClearOrphanData(bpy.types.Operator):
                 for i, mat_name in enumerate(sorted(unused_materials[:max_display])):
                     grid.label(text=f"• {mat_name}", icon='BLANK1')
                 
-                # Show "more items" if list is long
                 if len(unused_materials) > max_display:
                     mat_box.separator()
                     row = mat_box.row()

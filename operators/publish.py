@@ -1,3 +1,18 @@
+"""
+Asset Publishing System with Linked Library Support
+
+This module provides a comprehensive publishing workflow for Blender assets:
+- Pre-publish validation with Force Publish option
+- Automatic versioning (overwrite/increment modes)
+- Linked library management with structure mirroring
+- Texture consolidation and validation
+- Clean delivery structure with centralized logging
+
+Author: Rizqi Alfajri
+Version: 1.5.0
+Date: November 17, 2025
+"""
+
 import bpy
 import os
 import shutil
@@ -9,139 +24,77 @@ from bpy.props import StringProperty, BoolProperty, IntProperty, CollectionPrope
 from bpy.types import PropertyGroup
 
 
-# ============================================================================
-# PROPERTY GROUPS
-# ============================================================================
+# =============================================================================
+# DATA CLASSES & PROPERTY GROUPS
+# =============================================================================
 
 class LibrarySelectionItem(PropertyGroup):
-    """PropertyGroup for storing linked library info in UI"""
+    """Property group for storing linked library info in UI"""
     name: StringProperty(name="Library Name")
     filepath: StringProperty(name="File Path", subtype='FILE_PATH')
-    structure: StringProperty(name="Publish Structure")  # e.g., "environment/kayu"
+    structure: StringProperty(name="Publish Structure")
     selected: BoolProperty(name="Include in Publish", default=True)
     depth: IntProperty(name="Nesting Depth", default=0)
-    status: StringProperty(name="Validation Status", default="")  # OK, WARNING, ERROR
-    folder_name: StringProperty(name="Folder Name")  # e.g., "kayu"
+    status: StringProperty(name="Validation Status", default="")
+    folder_name: StringProperty(name="Folder Name")
     has_textures: BoolProperty(name="Has Textures", default=False)
 
 
-# ============================================================================
-# HELPER CLASSES - Linked Libraries Support
-# ============================================================================
+# =============================================================================
+# UTILITY CLASSES
+# =============================================================================
 
 class PathResolver:
-    """
-    Resolve publish paths from linked library relative paths.
-    Detects master root folder from current file, then uses it for library structure extraction.
-    """
+    """Resolve publish paths from linked library relative paths"""
     
     def __init__(self, publish_root):
         self.publish_root = os.path.normpath(publish_root)
-        self.master_root = None  # Will be detected from current file
+        self.master_root = None
     
     def detect_master_root(self, current_file_path):
-        """
-        Detect master root folder - the folder that CONTAINS the assets folder.
-        
-        Logic: Find the folder that contains "assets" subfolder.
-        
-        Args:
-            current_file_path: Absolute path to current .blend file
-            
-        Returns:
-            str: Absolute path to master root (e.g., "G:/...asset_management/")
-        
-        Example:
-            Input: "G:/...asset_management/assets/sets/rumah/rumah.blend"
-            Finds: "assets" folder exists in "G:/...asset_management/"
-            Output: "G:/...asset_management/"
-        """
+        """Detect master root folder that contains the assets folder"""
         if not current_file_path:
             return None
         
         current_dir = os.path.dirname(current_file_path)
         current_dir = os.path.normpath(current_dir)
         
-        # Walk UP the directory tree
         check_dir = current_dir
-        max_levels = 10  # Safety limit
+        max_levels = 10
         
         for _ in range(max_levels):
-            # Check if this directory contains "assets" subfolder
             assets_folder = os.path.join(check_dir, "assets")
             
             if os.path.exists(assets_folder) and os.path.isdir(assets_folder):
-                # Found it! This is the master root
                 return os.path.normpath(check_dir)
             
-            # Move up one level
             parent = os.path.dirname(check_dir)
             
-            # Reached root drive
             if parent == check_dir:
                 break
             
             check_dir = parent
         
-        # Fallback: return None (will use old behavior)
         return None
     
     def extract_structure_from_link(self, library_filepath):
-        """
-        Extract publish structure from Blender library link path.
-        
-        CRITICAL: Uses Blender's RELATIVE path to preserve structure, ensuring:
-        - Mirror folder structure in publish/
-        - Client files won't have broken links
-        
-        Args:
-            library_filepath: Blender library filepath (e.g., "//../../props/kursiHover/prp_kursiHover_mdl.blend")
-        
-        Returns:
-            dict with 'absolute', 'structure', 'filename', 'publish_path'
-        
-        Example:
-            Current file: .../assets/sets/rumah/rumah.blend
-            Library link: //../../props/kursiHover/prp_kursiHover_mdl.blend
-            
-            Blender path breakdown:
-            - "//" = current file's directory (.../assets/sets/rumah/)
-            - "../.." = go up 2 levels to .../assets/
-            - "props/kursiHover/" = structure we need!
-            
-            Output: {
-                'structure': 'props/kursiHover',
-                'publish_path': '.../publish/props/kursiHover/prp_kursiHover_mdl.blend'
-            }
-            
-            Why this works: Blender relative path ALREADY contains correct structure!
-        """
-        # Get absolute path from Blender relative path
+        """Extract publish structure from Blender library link path"""
         lib_absolute = bpy.path.abspath(library_filepath)
         lib_absolute = os.path.normpath(lib_absolute)
         
         filename = os.path.basename(lib_absolute)
         
-        # BEST METHOD: Parse Blender's relative path directly
-        # Blender path: //../../props/kursiHover/file.blend
-        # Structure: props/kursiHover
-        
         if library_filepath.startswith('//'):
-            # Remove "//" prefix and normalize
-            lib_relative = library_filepath[2:]  # Remove "//"
-            lib_relative = lib_relative.replace('\\', '/')  # Normalize slashes
+            lib_relative = library_filepath[2:]  
+            lib_relative = lib_relative.replace('\\', '/') 
             
-            # Split path parts
             parts = [p for p in lib_relative.split('/') if p and p != '..']
             
-            # Structure = all parts except filename
-            # e.g., ['props', 'kursiHover', 'file.blend'] → 'props/kursiHover'
             if len(parts) > 1:
                 structure = '/'.join(parts[:-1])
             else:
                 structure = ''
         else:
-            # Absolute path - fallback to extracting from absolute path
             if self.master_root:
                 assets_folder = os.path.join(self.master_root, "assets")
                 try:
@@ -149,11 +102,9 @@ class PathResolver:
                     rel_from_assets = os.path.normpath(rel_from_assets)
                     
                     if not rel_from_assets.startswith('..'):
-                        # Inside assets/
                         parts = rel_from_assets.split(os.sep)
                         structure = '/'.join(parts[:-1]) if len(parts) > 1 else ''
                     else:
-                        # Outside assets/ - use last 2 path parts
                         lib_dir = os.path.dirname(lib_absolute)
                         parts = lib_dir.split(os.sep)
                         structure = f"{parts[-2]}/{parts[-1]}" if len(parts) >= 2 else (parts[-1] if parts else '')
@@ -162,19 +113,14 @@ class PathResolver:
                     parts = lib_dir.split(os.sep)
                     structure = f"{parts[-2]}/{parts[-1]}" if len(parts) >= 2 else (parts[-1] if parts else '')
             else:
-                # No master root - extract from path
                 lib_dir = os.path.dirname(lib_absolute)
                 parts = lib_dir.split(os.sep)
                 structure = f"{parts[-2]}/{parts[-1]}" if len(parts) >= 2 else (parts[-1] if parts else '')
         
-        # Build publish path (mirror structure)
         publish_path = os.path.join(self.publish_root, structure, filename)
         publish_path = os.path.normpath(publish_path)
         
-        # Textures directory (same location as library file)
         textures_dir = os.path.join(os.path.dirname(lib_absolute), 'textures')
-        
-        # Get folder name for UI display
         folder_name = os.path.basename(os.path.dirname(lib_absolute))
         
         return {
@@ -187,54 +133,28 @@ class PathResolver:
         }
     
     def get_current_file_structure(self, current_file_path, publish_structure=None):
-        """
-        Get publish structure for current file using master root detection.
-        
-        Args:
-            current_file_path: Absolute path to current .blend file
-            publish_structure: Optional - scene.publish_structure property
-        
-        Returns:
-            dict with structure info
-        
-        Example:
-            Master root: G:/.../asset_management/
-            Current file: G:/.../asset_management/assets/sets/rumah/rumah.blend
-            Structure: sets/rumah  (relative to assets/ folder)
-        """
-        # Detect master root if not already done
+        """Get publish structure for current file using master root detection"""
         if not self.master_root:
             self.master_root = self.detect_master_root(current_file_path)
         
         if publish_structure:
-            # User has set custom structure
             structure = publish_structure
         else:
-            # Auto-detect from file location using master root
             if self.master_root:
                 try:
-                    # Get path to assets folder
                     assets_folder = os.path.join(self.master_root, "assets")
-                    
-                    # Get relative path from assets folder
                     rel_from_assets = os.path.relpath(current_file_path, assets_folder)
                     rel_from_assets = os.path.normpath(rel_from_assets)
                     
-                    # Split to get parts (excluding filename)
                     parts = rel_from_assets.split(os.sep)[:-1]
-                    
-                    # Structure = path from assets/ folder
-                    # e.g., "sets/rumah" or "props/meja"
                     structure = '/'.join(parts) if parts else ''
                     
                 except ValueError:
-                    # Fallback to old behavior
                     file_dir = os.path.dirname(current_file_path)
                     parent_folder = os.path.basename(file_dir)
                     grandparent_folder = os.path.basename(os.path.dirname(file_dir))
                     structure = f"{grandparent_folder}/{parent_folder}"
             else:
-                # No master root - use old behavior
                 file_dir = os.path.dirname(current_file_path)
                 parent_folder = os.path.basename(file_dir)
                 grandparent_folder = os.path.basename(os.path.dirname(file_dir))
@@ -251,43 +171,28 @@ class PathResolver:
         }
     
     def get_version_filename(self, filename, version_number):
-        """
-        Get versioned filename.
-        
-        Example:
-            filename: rumah.blend
-            version_number: 3
-            returns: rumah_v003.blend
-        """
+        """Get versioned filename (e.g. house.blend -> house_v003.blend)"""
         name, ext = os.path.splitext(filename)
         return f"{name}_v{version_number:03d}{ext}"
 
 
 class CircularDependencyError(Exception):
-    """Raised when circular library dependency detected"""
+    """Custom exception for circular library dependencies"""
     pass
 
 
 class LinkedLibraryScanner:
-    """
-    Scan and validate linked libraries recursively.
-    Max depth: 3 levels (current file + 2 nested levels)
-    """
+    """Scan and validate linked libraries recursively (max depth: 3 levels)"""
     
     def __init__(self, publish_root, max_depth=3):
         self.publish_root = publish_root
         self.max_depth = max_depth
-        self.visited = set()  # Prevent circular dependencies
-        self.libraries = []   # Flat list of all discovered libraries
+        self.visited = set()
+        self.libraries = []
         self.path_resolver = PathResolver(publish_root)
     
     def scan(self, current_depth=0):
-        """
-        Scan linked libraries from current open file.
-        
-        Returns:
-            List of library info dicts
-        """
+        """Scan linked libraries from current open file"""
         if current_depth >= self.max_depth:
             return self.libraries
         
@@ -297,20 +202,17 @@ class LinkedLibraryScanner:
         
         current_file = os.path.normpath(current_file)
         
-        # Check for circular dependency
         if current_file in self.visited:
             raise CircularDependencyError(f"Circular dependency: {current_file}")
         
         self.visited.add(current_file)
         
-        # Scan libraries in current file
         for lib in bpy.data.libraries:
             lib_info = self.path_resolver.extract_structure_from_link(lib.filepath)
             
             if not lib_info:
                 continue
             
-            # Check if file exists
             lib_info['exists'] = os.path.exists(lib_info['absolute'])
             lib_info['has_textures'] = os.path.exists(lib_info['textures_dir'])
             lib_info['depth'] = current_depth + 1
@@ -321,36 +223,21 @@ class LinkedLibraryScanner:
         return self.libraries
     
     def scan_recursive(self, blend_file_path, current_depth=0):
-        """
-        Recursively scan nested libraries (for future deep scanning).
-        Note: Requires opening each .blend file (slow, implement later)
-        """
-        # TODO: Implement recursive scanning by opening each .blend file
-        # For now, only scan current file's direct links
+        """Recursively scan nested libraries (requires opening files - slow)"""
         pass
 
 
-# ============================================================================
-# MAIN PUBLISH OPERATOR
-# ============================================================================
+# =============================================================================
+# MAIN PUBLISHING OPERATOR
+# =============================================================================
 
 class ASSET_OT_Publish(bpy.types.Operator):
-    """Publish asset to production folder with clean textures.
-    
-    Process:
-    • Validates all textures are consolidated locally
-    • Purges orphan data from blend file
-    • Copies only used textures (skips unused files)
-    • Excludes .backup and .trash folders
-    • Supports versioning mode (assetName_v001, v002, etc)
-    • Logs all publish activity to .log files
-    """
+    """Publish asset to production folder with clean textures"""
     bl_idname = "asset.publish"
     bl_label = "Publish Asset"
     bl_description = "Publish asset with validated textures, purged data, and optional versioning"
     bl_options = {'REGISTER'}
     
-    # Internal data
     asset_name = ""
     blend_file = ""
     textures_to_copy = []
@@ -358,16 +245,15 @@ class ASSET_OT_Publish(bpy.types.Operator):
     validation_warnings = []
     files_to_remove = []
     is_forced = False
-    libraries_to_publish = []  # List of library info dicts to publish
+    libraries_to_publish = []
     
     def write_publish_log(self, publish_path, asset_path, target_path, texture_count, status, notes=""):
-        """Write to centralized publish log in publish folder"""
+        """Write to centralized publish log"""
         log_file = os.path.join(publish_path, ".publish_activity.log")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         username = getpass.getuser()
         mode = bpy.context.scene.publish_versioning_mode
         
-        # Enhanced log format with paths for detection
         log_entry = (
             f"[{timestamp}] PUBLISH | "
             f"Asset: {self.asset_name} | "
@@ -386,11 +272,7 @@ class ASSET_OT_Publish(bpy.types.Operator):
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(log_entry)
         except Exception as e:
-            print(f"Warning: Could not write to centralized log: {e}")
-    
-    def write_asset_history(self, asset_dir, target_path, texture_count, status, notes=""):
-        """Removed - No longer writing per-asset history (clean delivery)"""
-        pass
+            print(f"Warning: Could not write to log: {e}")
     
     def get_asset_name(self):
         """Get asset name from parent folder of .blend file"""
@@ -404,12 +286,10 @@ class ASSET_OT_Publish(bpy.types.Operator):
         self.validation_errors = []
         self.validation_warnings = []
         
-        # Check file is saved - ABSOLUTE requirement (can't force)
         if not bpy.data.filepath:
             self.validation_errors.append("File must be saved first")
             return False
         
-        # Check publish path is set - ABSOLUTE requirement (can't force)
         publish_path = context.scene.publish_path
         if not publish_path or not publish_path.strip():
             self.validation_errors.append("Publish path not set. Set path in Publish panel first")
@@ -418,13 +298,10 @@ class ASSET_OT_Publish(bpy.types.Operator):
         blend_dir = os.path.dirname(bpy.data.filepath)
         textures_dir = os.path.join(blend_dir, "textures")
         
-        # Check textures folder exists - WARNING (can be forced)
         if not os.path.exists(textures_dir):
             self.validation_warnings.append("Textures folder not found (will publish without textures)")
-            # Skip texture validation if no folder
             return len(self.validation_errors) == 0
         
-        # Check all textures are in local textures folder
         external_textures = []
         missing_textures = []
         packed_textures = []
@@ -448,14 +325,12 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 missing_textures.append(img.name)
                 continue
             
-            # Check if texture is in local textures folder
             try:
                 if os.path.commonpath([abs_path, textures_dir]) != textures_dir:
                     external_textures.append(img.name)
             except ValueError:
                 external_textures.append(img.name)
         
-        # ALL texture issues are now WARNINGS (can be forced)
         if missing_textures:
             self.validation_warnings.append(f"Missing textures ({len(missing_textures)}): {', '.join(missing_textures[:3])}")
         
@@ -463,7 +338,7 @@ class ASSET_OT_Publish(bpy.types.Operator):
             self.validation_warnings.append(f"External textures found ({len(external_textures)}). Will copy only local textures")
         
         if packed_textures:
-            self.validation_warnings.append(f"Packed textures ({len(packed_textures)}) will be skipped")
+            self.validation_warnings.append(f"Packed textures ({len(packed_textures)}) will be auto-unpacked to /textures after publish")
         
         return len(self.validation_errors) == 0
     
@@ -508,7 +383,6 @@ class ASSET_OT_Publish(bpy.types.Operator):
             all_files.extend(glob.glob(os.path.join(textures_dir, f"*.{ext}")))
             all_files.extend(glob.glob(os.path.join(textures_dir, f"*.{ext.upper()}")))
         
-        # Remove duplicates (Windows is case-insensitive, can find same file twice)
         all_files = list(set(all_files))
         
         used_textures = self.get_used_textures()
@@ -534,14 +408,13 @@ class ASSET_OT_Publish(bpy.types.Operator):
         return textures_to_copy, unused_files
     
     def get_target_path(self, context):
-        """Get target publish path with versioning if needed (OLD SYSTEM - folder-based)"""
+        """Get target publish path with versioning"""
         publish_path = context.scene.publish_path
         base_path = os.path.join(publish_path, self.asset_name)
         
         if context.scene.publish_versioning_mode == 'OVERWRITE':
             return base_path
         
-        # Versioning mode - find next version number
         version_num = 1
         while True:
             versioned_path = f"{base_path}_v{version_num:03d}"
@@ -549,43 +422,131 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 return versioned_path
             version_num += 1
     
-    # ========================================================================
-    # ========================================================================
-    # FILE PUBLISHING METHODS (OVERWRITE MODE - NO VERSIONING)
-    # ========================================================================
+    def relink_external_libraries(self, blend_file_path, published_libraries, publish_root, context):
+        """Relink external libraries in published blend file to use new relative paths"""
+        try:
+            from bpy_extras import blendfile
+            
+            relinked_count = 0
+            
+            lib_path_map = {}
+            for lib in published_libraries:
+                if lib['structure'].startswith('_external'):
+                    lib_name = lib['name']  
+                    new_path = lib['path']   
+                    lib_path_map[lib_name] = new_path
+                    print(f"External lib to relink: {lib_name} → {new_path}")
+            
+            if not lib_path_map:
+                print("No external libraries to relink")
+                return 0
+            
+            print(f"\nRelinking libraries in: {blend_file_path}")
+            published_file_dir = os.path.dirname(blend_file_path)
+            
+            with blendfile.open_blend(blend_file_path, mode='r+b') as blend:
+                for block in blend.blocks:
+                    if block.code == b'LI':
+                        lib_data = block.get_pointer(b'name')
+                        if lib_data:
+                            lib_name_bytes = lib_data[0]
+                            lib_filepath_bytes = block.get_pointer(b'filepath')
+                            
+                            if lib_filepath_bytes:
+                                old_path = lib_filepath_bytes[0].decode('utf-8', errors='ignore')
+                                old_abs = bpy.path.abspath(old_path) if old_path.startswith('//') else old_path
+                                lib_folder_name = os.path.basename(os.path.dirname(old_abs))
+                                
+                                if lib_folder_name in lib_path_map:
+                                    new_abs_path = lib_path_map[lib_folder_name]
+                                    
+                                    try:
+                                        rel_path = os.path.relpath(new_abs_path, published_file_dir)
+                                        blender_rel_path = "//" + rel_path.replace("\\", "/")
+                                        new_path_bytes = blender_rel_path.encode('utf-8')
+                                        block.set_pointer(b'filepath', [new_path_bytes])
+                                        relinked_count += 1
+                                        print(f"✓ Relinked: {lib_folder_name}")
+                                        print(f"    Old: {old_path}")
+                                        print(f"    New: {blender_rel_path}")
+                                        
+                                    except ValueError:
+                                        new_path_bytes = new_abs_path.encode('utf-8')
+                                        block.set_pointer(b'filepath', [new_path_bytes])
+                                        relinked_count += 1
+                                        print(f"✓ Relinked (absolute): {lib_folder_name}")
+            
+            print(f"\n✓ Relinked {relinked_count} external libraries (low-level edit)")
+            return relinked_count
+            
+        except ImportError:
+            print("⚠ Low-level blendfile library not available, using fallback method")
+            return self._relink_by_opening_file(blend_file_path, published_libraries, publish_root, context)
+            
+        except Exception as e:
+            print(f"⚠ Warning: Failed to relink libraries: {e}")
+            import traceback
+            traceback.print_exc()
+            return 0
+    
+    def _relink_by_opening_file(self, blend_file_path, published_libraries, publish_root, context):
+        try:
+            import bpy
+            
+            relinked_count = 0
+            lib_path_map = {}
+            
+            for lib in published_libraries:
+                if lib['structure'].startswith('_external'):
+                    lib_path_map[lib['name']] = lib['path']
+            
+            if not lib_path_map:
+                return 0
+            
+            current_file = bpy.data.filepath
+            
+            print(f"Opening file for relink (fallback method): {blend_file_path}")
+            bpy.ops.wm.open_mainfile(filepath=blend_file_path)
+            
+            published_file_dir = os.path.dirname(blend_file_path)
+            for lib in bpy.data.libraries:
+                lib_folder_name = os.path.basename(os.path.dirname(bpy.path.abspath(lib.filepath)))
+                
+                if lib_folder_name in lib_path_map:
+                    new_abs_path = lib_path_map[lib_folder_name]
+                    
+                    try:
+                        rel_path = os.path.relpath(new_abs_path, published_file_dir)
+                        blender_rel_path = "//" + rel_path.replace("\\", "/")
+                        lib.filepath = blender_rel_path
+                        relinked_count += 1
+                    except ValueError:
+                        lib.filepath = new_abs_path
+                        relinked_count += 1
+            
+            bpy.ops.wm.save_mainfile(filepath=blend_file_path)
+            if current_file:
+                bpy.ops.wm.open_mainfile(filepath=current_file)
+            
+            return relinked_count
+            
+        except Exception as e:
+            print(f"Fallback relink failed: {e}")
+            try:
+                if current_file:
+                    bpy.ops.wm.open_mainfile(filepath=current_file)
+            except:
+                pass
+            return 0
     
     def publish_master_file(self, source_path, target_folder, context):
-        """
-        Publish master file with versioning mode support.
-        
-        Process:
-        1. Determine filename based on versioning mode
-        2. Copy file to publish folder
-        3. Purge orphan data
-        4. Textures handled separately
-        
-        Modes:
-        - OVERWRITE: house.blend (always overwrites)
-        - VERSIONING: house_v001.blend, house_v002.blend (incremental)
-        
-        Args:
-            source_path: Absolute path to source .blend file
-            target_folder: Target folder for publishing
-            context: Blender context
-        
-        Returns:
-            str: Published file path
-        """
-        # Create target folder if needed
+        """Publish master file with versioning support (overwrite or increment)"""
         os.makedirs(target_folder, exist_ok=True)
         
-        # Get base filename
         base_filename = os.path.basename(source_path)
         name_without_ext = os.path.splitext(base_filename)[0]
         
-        # Determine final filename based on mode
         if context.scene.publish_versioning_mode == 'VERSIONING':
-            # Find next version number
             version_num = 1
             while True:
                 versioned_name = f"{name_without_ext}_v{version_num:03d}.blend"
@@ -594,59 +555,37 @@ class ASSET_OT_Publish(bpy.types.Operator):
                     published_path = versioned_path
                     break
                 version_num += 1
+            
+            self.copy_blend_file_with_cleanup(source_path, published_path)
+            
+            if context.scene.publish_sync_to_master:
+                master_path = os.path.join(target_folder, base_filename)
+                self.copy_blend_file_with_cleanup(source_path, master_path)
+                print(f"✓ Auto-synced to master: {master_path}")
         else:
-            # OVERWRITE mode - use original filename
             published_path = os.path.join(target_folder, base_filename)
-        
-        # Copy file with cleanup
-        self.copy_blend_file_with_cleanup(source_path, published_path)
+            self.copy_blend_file_with_cleanup(source_path, published_path)
         
         return published_path
     
     def publish_linked_library(self, lib_info, context):
-        """
-        Publish linked library with versioning mode support.
+        """Publish linked library with structure mirroring"""
+        source_path = lib_info['filepath']
+        publish_root = context.scene.publish_path
+        structure = lib_info.get('structure', '')
+        folder_name = lib_info.get('folder_name', os.path.basename(os.path.dirname(source_path)))
         
-        Process:
-        1. Copy library file to publish path
-        2. Purge orphan data
-        3. Respect versioning mode (overwrite or versioned filenames)
-        
-        Args:
-            lib_info: Library info dict from LinkedLibraryScanner
-            context: Blender context
-        
-        Returns:
-            str: Published file path
-        """
-        source_path = lib_info['absolute']
-        base_target_path = lib_info['publish_path']
-        
-        # Create target folder
-        target_folder = os.path.dirname(base_target_path)
+        target_folder = os.path.join(publish_root, structure)
         os.makedirs(target_folder, exist_ok=True)
         
-        # Get base filename
         base_filename = os.path.basename(source_path)
-        name_without_ext = os.path.splitext(base_filename)[0]
+        target_path = os.path.join(target_folder, base_filename)
+        shutil.copy2(source_path, target_path)
         
-        # Determine final filename based on mode
-        if context.scene.publish_versioning_mode == 'VERSIONING':
-            # Find next version number
-            version_num = 1
-            while True:
-                versioned_name = f"{name_without_ext}_v{version_num:03d}.blend"
-                versioned_path = os.path.join(target_folder, versioned_name)
-                if not os.path.exists(versioned_path):
-                    target_path = versioned_path
-                    break
-                version_num += 1
-        else:
-            # OVERWRITE mode - use original filename
-            target_path = os.path.join(target_folder, base_filename)
-        
-        # Copy file with cleanup
-        self.copy_blend_file_with_cleanup(source_path, target_path)
+        print(f"Published library: {folder_name}")
+        print(f"  Source: {source_path}")
+        print(f"  Target: {target_path}")
+        print(f"  Structure: {structure}")
         
         return target_path
     
@@ -658,81 +597,66 @@ class ASSET_OT_Publish(bpy.types.Operator):
             source_path: Source .blend file
             target_path: Destination .blend file
         """
-        # For now, simple copy
-        # TODO: Implement orphan data purging by opening file in background
         shutil.copy2(source_path, target_path)
-        
-        # TODO: Open target file, purge orphans, save, close
-        # This requires background Blender instance or careful handling
-        # For MVP, we skip purging during publish
     
     def copy_library_textures(self, lib_info, target_folder):
-        """
-        Copy textures for a linked library.
-        
-        Args:
-            lib_info: Library info dict
-            target_folder: Target folder for published library
-        """
-        source_textures_dir = lib_info['textures_dir']
-        target_textures_dir = os.path.join(target_folder, 'textures')
+        """Copy textures folder with subdirectories (skips hidden folders)"""
+        source_lib_dir = os.path.dirname(lib_info['filepath'])
+        source_textures_dir = os.path.join(source_lib_dir, 'textures')
         
         if not os.path.exists(source_textures_dir):
+            print(f"  No textures folder for {lib_info.get('folder_name', 'library')}")
             return
         
-        # Create target textures folder
+        target_textures_dir = os.path.join(target_folder, 'textures')
         os.makedirs(target_textures_dir, exist_ok=True)
         
-        # Copy all texture files (overwrite)
-        for filename in os.listdir(source_textures_dir):
-            source_file = os.path.join(source_textures_dir, filename)
+        copied_count = 0
+        for root, dirs, files in os.walk(source_textures_dir):
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            rel_path = os.path.relpath(root, source_textures_dir)
             
-            # Skip directories and hidden files
-            if os.path.isdir(source_file) or filename.startswith('.'):
-                continue
+            if rel_path == '.':
+                target_dir = target_textures_dir
+            else:
+                target_dir = os.path.join(target_textures_dir, rel_path)
+                os.makedirs(target_dir, exist_ok=True)
             
-            target_file = os.path.join(target_textures_dir, filename)
-            shutil.copy2(source_file, target_file)
-    
-    # ========================================================================
-    # END NEW METHODS
-    # ========================================================================
+            for filename in files:
+                if filename.startswith('.'):
+                    continue
+                
+                source_file = os.path.join(root, filename)
+                target_file = os.path.join(target_dir, filename)
+                shutil.copy2(source_file, target_file)
+                copied_count += 1
+        
+        print(f"  Copied {copied_count} textures")
+        return copied_count
     
     def invoke(self, context, event):
-        # SAFETY CHECK 1: Require validation check to be run first
         if not context.scene.publish_check_done:
             self.report({'ERROR'}, "Run 'Check Publish' first to validate asset readiness")
             return {'CANCELLED'}
         
-        # SAFETY CHECK 2: Block if this is a published file (Option A - Total Block)
         if context.scene.publish_is_published_file:
             self.report({'ERROR'}, "Cannot publish from publish directory! Open the source file instead.")
             return {'CANCELLED'}
         
-        # Get asset name
         self.asset_name = self.get_asset_name()
         if not self.asset_name:
             self.report({'ERROR'}, "Could not determine asset name")
             return {'CANCELLED'}
         
-        # Validate
         validation_passed = self.validate_publish(context)
-        
-        # Check if force publish is enabled
         self.is_forced = context.scene.publish_force
         
-        # Only block on ABSOLUTE errors (file not saved, no publish path)
-        # Everything else can be forced!
         if not validation_passed and not self.is_forced:
-            # Has critical errors and NOT forcing
             return context.window_manager.invoke_props_dialog(self, width=500)
         
-        # If forcing, allow even with critical warnings
         if self.is_forced and self.validation_warnings:
-            # Force mode - bypass all warnings
             pass
         
-        # Scan textures (only if folder exists)
         blend_dir = os.path.dirname(bpy.data.filepath)
         textures_dir = os.path.join(blend_dir, "textures")
         
@@ -742,7 +666,6 @@ class ASSET_OT_Publish(bpy.types.Operator):
             self.textures_to_copy = []
             unused_files = []
         
-        # Find folders to remove (.backup, .trash)
         self.files_to_remove = []
         if os.path.exists(textures_dir):
             backup_dir = os.path.join(textures_dir, ".backup")
@@ -758,42 +681,29 @@ class ASSET_OT_Publish(bpy.types.Operator):
             if len(unused_files) > 5:
                 self.files_to_remove.append(f"... and {len(unused_files) - 5} more unused files")
         
-        # ====================================================================
-        # SCAN LINKED LIBRARIES (for dialog display)
-        # ====================================================================
         self.libraries_to_publish = []
         
         if context.scene.publish_include_libraries:
-            publish_path = context.scene.publish_path
+            for item in context.scene.publish_library_selection:
+                if item.selected:
+                    lib_info = {
+                        'filepath': item.filepath,
+                        'structure': item.structure,
+                        'folder_name': item.folder_name,
+                        'has_textures': item.has_textures,
+                        'status': item.status
+                    }
+                    self.libraries_to_publish.append(lib_info)
             
-            try:
-                scanner = LinkedLibraryScanner(publish_path, max_depth=3)
-                libraries = scanner.scan()
-                
-                # Filter selected libraries
-                for lib_info in libraries:
-                    # Check if selected in UI
-                    is_selected = True
-                    for item in context.scene.publish_library_selection:
-                        if item.filepath == lib_info['absolute']:
-                            is_selected = item.selected
-                            break
-                    
-                    if is_selected and lib_info['exists']:
-                        self.libraries_to_publish.append(lib_info)
-                
-            except CircularDependencyError as e:
-                self.report({'ERROR'}, f"Circular dependency detected: {str(e)}")
-                return {'CANCELLED'}
-            except Exception as e:
-                self.report({'WARNING'}, f"Library scan warning: {str(e)}")
+            print(f"\nLibraries to publish: {len(self.libraries_to_publish)}")
+            for lib in self.libraries_to_publish:
+                print(f"  - {lib['folder_name']} ({lib['structure']})")
         
         return context.window_manager.invoke_props_dialog(self, width=600)
     
     def draw(self, context):
         layout = self.layout
         
-        # Show validation errors (ABSOLUTE - can't force)
         if self.validation_errors:
             box = layout.box()
             box.alert = True
@@ -804,7 +714,6 @@ class ASSET_OT_Publish(bpy.types.Operator):
             layout.label(text="Fix these errors first", icon='INFO')
             return
         
-        # Show validation warnings (can be forced)
         if self.validation_warnings:
             box = layout.box()
             box.alert = True
@@ -813,89 +722,154 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 box.label(text=f"  • {warning}", icon='BLANK1')
             
             if self.is_forced:
-                layout.separator()
                 force_box = layout.box()
                 force_box.alert = True
                 force_box.label(text="🚨 FORCE PUBLISH ACTIVE", icon='ERROR')
-                force_box.label(text="⚠️ ALL WARNINGS WILL BE IGNORED", icon='BLANK1')
-                force_box.label(text="⚠️ YOU TAKE FULL RESPONSIBILITY", icon='BLANK1')
             
             layout.separator()
         
-        # Asset info
         box = layout.box()
-        box.label(text="📦 Asset Information:", icon='ASSET_MANAGER')
-        box.label(text=f"Asset Name: {self.asset_name}", icon='BLANK1')
-        box.label(text=f"Blend File: {os.path.basename(bpy.data.filepath)}", icon='BLANK1')
+        box.label(text="� Asset Publish Info", icon='ASSET_MANAGER')
         
-        layout.separator()
+        col = box.column(align=True)
+        col.use_property_split = True
+        col.use_property_decorate = False
+        col.scale_y = 0.85
         
-        # Publish settings
-        box = layout.box()
-        box.label(text="⚙️ Publish Settings:", icon='SETTINGS')
-        box.label(text=f"Path: {context.scene.publish_path}", icon='BLANK1')
-        box.label(text=f"Mode: {context.scene.publish_versioning_mode}", icon='BLANK1')
+        row = col.row(align=True)
+        row.label(text="Asset Name:")
+        row.label(text=self.asset_name)
+        
+        row = col.row(align=True)
+        row.label(text="File Name:")
+        row.label(text=os.path.basename(bpy.data.filepath))
+        
+        row = col.row(align=True)
+        row.label(text="Publish Path:")
+        row.label(text=context.scene.publish_path)
         
         target_path = self.get_target_path(context)
-        box.label(text=f"Target: {target_path}", icon='BLANK1')
+        target_folder = os.path.basename(target_path).replace('.blend', '')
+        row = col.row(align=True)
+        row.label(text="Target Folder:")
+        row.label(text=target_folder)
         
         layout.separator()
         
-        # Files to send
         box = layout.box()
+        box.label(text="📦 Files Summary", icon='FILEBROWSER')
         
-        # Calculate total files to send
-        total_files = 1 + len(self.textures_to_copy)  # Master blend + textures
+        split = box.split(factor=0.5)
+        
+        col_send = split.column(align=True)
+        
+        total_files = 1 + len(self.textures_to_copy)
         if self.libraries_to_publish:
-            total_files += len(self.libraries_to_publish)  # Add library blend files
+            total_files += len(self.libraries_to_publish)
         
-        box.label(text=f"✅ Files to Send ({total_files}):", icon='CHECKMARK')
+        col_send.label(text=f"✅ Will Send ({total_files}):", icon='CHECKMARK')
         
-        # Master file
-        box.label(text=f"  • {os.path.basename(bpy.data.filepath)} (cleaned)", icon='FILE_BLEND')
-        box.label(text=f"  • {len(self.textures_to_copy)} texture files", icon='TEXTURE')
+        inner_col = col_send.column(align=True)
+        inner_col.use_property_split = True
+        inner_col.use_property_decorate = False
+        inner_col.scale_y = 0.8
         
-        # Preview some textures with file sizes
-        for tex in self.textures_to_copy[:3]:
-            try:
-                file_size = os.path.getsize(tex)
-                if file_size < 1024:
-                    size_str = f"{file_size} B"
-                elif file_size < 1024 * 1024:
-                    size_str = f"{file_size / 1024:.1f} KB"
-                else:
-                    size_str = f"{file_size / (1024 * 1024):.1f} MB"
-                box.label(text=f"    - {os.path.basename(tex)} ({size_str})", icon='BLANK1')
-            except Exception:
-                # Fallback if file size can't be determined
-                box.label(text=f"    - {os.path.basename(tex)}", icon='BLANK1')
-        if len(self.textures_to_copy) > 3:
-            box.label(text=f"    - ... and {len(self.textures_to_copy) - 3} more", icon='BLANK1')
+        row = inner_col.row(align=True)
+        row.label(text="Blend File:")
+        row.label(text=os.path.basename(bpy.data.filepath))
         
-        # Show linked libraries if any
-        if self.libraries_to_publish:
-            box.separator(factor=0.5)
-            box.label(text=f"  • {len(self.libraries_to_publish)} Linked Libraries:", icon='LINKED')
+        if self.textures_to_copy:
+            inner_col.separator(factor=0.3)
+            inner_col.label(text="Textures:")
+            for tex_path in self.textures_to_copy[:5]:
+                tex_name = os.path.basename(tex_path)
+                tex_display = tex_name if len(tex_name) < 30 else tex_name[:27] + "..."
+                row = inner_col.row(align=True)
+                row.label(text="  " + tex_display, icon='TEXTURE')
             
-            for lib_info in self.libraries_to_publish[:5]:
-                indent = "  " * lib_info['depth']
+            if len(self.textures_to_copy) > 5:
+                row = inner_col.row(align=True)
+                row.label(text=f"  ... and {len(self.textures_to_copy) - 5} more", icon='BLANK1')
+        
+        if self.libraries_to_publish:
+            inner_col.separator(factor=0.3)
+            row = inner_col.row(align=True)
+            row.label(text="Libraries:")
+            row.label(text=f"{len(self.libraries_to_publish)} files")
+        
+        col_exclude = split.column(align=True)
+        
+        if self.files_to_remove:
+            col_exclude.label(text=f"🗑️ Will NOT Send ({len(self.files_to_remove)}):", icon='TRASH')
+            
+            inner_col2 = col_exclude.column(align=True)
+            inner_col2.scale_y = 0.8
+            
+            for item in self.files_to_remove[:5]:
+                item_display = item if len(item) < 35 else item[:32] + "..."
+                row = inner_col2.row(align=True)
+                row.label(text="  " + item_display, icon='BLANK1')
+            
+            if len(self.files_to_remove) > 5:
+                inner_col2.separator(factor=0.2)
+                row = inner_col2.row(align=True)
+                row.label(text=f"  ... and {len(self.files_to_remove) - 5} more", icon='BLANK1')
+        
+        layout.separator()
+        
+        if self.libraries_to_publish:
+            box = layout.box()
+            box.label(text=f"🔗 Linked Libraries ({len(self.libraries_to_publish)}):", icon='LINKED')
+            
+            for lib_info in self.libraries_to_publish[:10]:
                 lib_name = lib_info['folder_name']
                 lib_structure = lib_info['structure']
-                box.label(text=f"    {indent}→ {lib_name} ({lib_structure})", icon='FILE_BLEND')
+                box.label(text=f"  → {lib_name}", icon='FILE_BLEND')
+                
+                row = box.row()
+                row.scale_y = 0.7
+                row.label(text=f"     Structure: {lib_structure}", icon='BLANK1')
             
-            if len(self.libraries_to_publish) > 5:
-                box.label(text=f"    ... and {len(self.libraries_to_publish) - 5} more libraries", icon='BLANK1')
+            if len(self.libraries_to_publish) > 10:
+                box.label(text=f"  ... and {len(self.libraries_to_publish) - 10} more libraries", icon='BLANK1')
         
         layout.separator()
         
-        # Files to exclude
-        if self.files_to_remove:
+        if context.scene.publish_packed_count > 0:
             box = layout.box()
-            box.label(text=f"🗑️ Will NOT Send:", icon='TRASH')
-            for item in self.files_to_remove[:10]:
-                box.label(text=f"  • {item}", icon='BLANK1')
+            box.label(text="📦 Packed Textures:", icon='PACKAGE')
+            
+            row = box.row()
+            row.prop(context.scene, "publish_auto_unpack", text="Auto-Unpack After Publish", icon='CHECKMARK')
+            
+            info_col = box.column(align=True)
+            info_col.scale_y = 0.7
+            if context.scene.publish_auto_unpack:
+                info_col.label(text=f"✓ Will unpack {context.scene.publish_packed_count} textures to /textures", icon='BLANK1')
+                info_col.label(text="✓ Recommended for clean asset management", icon='BLANK1')
+            else:
+                info_col.label(text="⚠ Textures will remain packed in .blend file", icon='BLANK1')
+                info_col.label(text="⚠ May increase file size significantly", icon='BLANK1')
+            
+            layout.separator()
         
-        layout.separator()
+        if context.scene.publish_versioning_mode == 'VERSIONING':
+            box = layout.box()
+            box.label(text="🔄 Versioning Options:", icon='FILE_REFRESH')
+            
+            row = box.row()
+            row.prop(context.scene, "publish_sync_to_master", text="Auto-sync to Master", icon='LINKED')
+            
+            info_col = box.column(align=True)
+            info_col.scale_y = 0.7
+            if context.scene.publish_sync_to_master:
+                info_col.label(text=f"✓ Will also update master file (without _v suffix)", icon='BLANK1')
+                info_col.label(text=f"✓ Master = {self.asset_name}.blend", icon='BLANK1')
+            else:
+                info_col.label(text="ℹ Version and master files will be independent", icon='BLANK1')
+            
+            layout.separator()
+        
         layout.label(text="⚠️ Asset will be cleaned before publish:", icon='INFO')
         layout.label(text="  • Orphan data will be purged", icon='BLANK1')
         layout.label(text="  • File will be saved", icon='BLANK1')
@@ -904,30 +878,13 @@ class ASSET_OT_Publish(bpy.types.Operator):
             layout.label(text="  • Linked libraries will be published", icon='BLANK1')
     
     def execute(self, context):
-        """
-        Main publish execution with linked libraries support.
-        
-        NEW FLOW:
-        1. Validate & setup
-        2. Scan linked libraries (if enabled)
-        3. Publish linked libraries first
-        4. Publish master file
-        5. Copy textures for all files
-        6. Update logs
-        """
-        # Only check ABSOLUTE errors (file not saved, no publish path)
-        # Force publish bypasses ALL warnings!
         if self.validation_errors:
             self.report({'ERROR'}, "Cannot publish: fix critical errors first")
             return {'CANCELLED'}
         
         try:
-            # ================================================================
-            # STEP 1: Setup & Validation
-            # ================================================================
             publish_path = context.scene.publish_path
             
-            # Validate publish path
             if not os.path.exists(publish_path):
                 try:
                     os.makedirs(publish_path, exist_ok=True)
@@ -936,55 +893,53 @@ class ASSET_OT_Publish(bpy.types.Operator):
                     self.report({'ERROR'}, f"Cannot create publish path: {str(e)}")
                     return {'CANCELLED'}
             
-            # Clean the blend file (purge orphans)
             self.report({'INFO'}, "Cleaning blend file...")
             bpy.ops.outliner.orphans_purge(do_recursive=True)
             bpy.ops.wm.save_mainfile()
             
-            # Initialize PathResolver
-            path_resolver = PathResolver(publish_path)
-            
-            # ================================================================
-            # STEP 2: Collect Files to Publish
-            # ================================================================
-            
-            # Current file info
             current_file = bpy.data.filepath
-            current_structure = context.scene.publish_structure
-            current_info = path_resolver.get_current_file_structure(
-                current_file,
-                publish_structure=current_structure
-            )
+            current_folder = os.path.dirname(current_file)
+            current_filename = os.path.basename(current_file)
             
-            # Auto-set publish_structure if empty (first time)
-            if not current_structure:
-                context.scene.publish_structure = current_info['structure']
+            current_file_normalized = os.path.abspath(os.path.normpath(current_file))
             
-            files_to_publish = {
-                'master': {
-                    'source_path': current_file,
-                    'target_folder': current_info['publish_folder'],
-                    'filename': current_info['filename'],
-                    'textures_dir': current_info['textures_dir'],
-                    'structure': current_info['structure']
-                },
-                'libraries': []
-            }
+            internal_lib_paths = [current_file_normalized]
             
-            # Use libraries already scanned in invoke()
+            current_drive = os.path.splitdrive(current_file_normalized)[0]
+            for lib_info in self.libraries_to_publish:
+                lib_filepath = lib_info['filepath']
+                lib_filepath_normalized = os.path.abspath(os.path.normpath(lib_filepath))
+                lib_drive = os.path.splitdrive(lib_filepath_normalized)[0]
+                
+                if lib_drive == current_drive:
+                    internal_lib_paths.append(lib_filepath_normalized)
+            
+            if len(internal_lib_paths) > 1:
+                try:
+                    common_root = os.path.commonpath(internal_lib_paths)
+                except ValueError:
+                    common_root = os.path.dirname(current_file_normalized)
+            else:
+                common_root = os.path.dirname(current_file_normalized)
+            
+            rel_path = os.path.relpath(current_file_normalized, common_root)
+            master_structure = os.path.dirname(rel_path)
+            
+            master_target_folder = os.path.join(publish_path, master_structure)
+            master_textures_dir = os.path.join(current_folder, "textures")
+            
+            print(f"\nMaster file structure:")
+            print(f"  Common root: {common_root}")
+            print(f"  Structure: {master_structure}")
+            print(f"  Target: {master_target_folder}")
+            
             library_count = 0
             if context.scene.publish_include_libraries and self.libraries_to_publish:
-                # Use pre-scanned libraries from invoke()
-                files_to_publish['libraries'] = self.libraries_to_publish
                 library_count = len(self.libraries_to_publish)
                 self.report({'INFO'}, f"Publishing {library_count} linked libraries")
             
-            # ================================================================
-            # STEP 3: Publish Linked Libraries First
-            # ================================================================
             published_libraries = []
-            
-            for lib_info in files_to_publish['libraries']:
+            for lib_info in self.libraries_to_publish:
                 try:
                     lib_path = self.publish_linked_library(lib_info, context)
                     published_libraries.append({
@@ -993,48 +948,45 @@ class ASSET_OT_Publish(bpy.types.Operator):
                         'structure': lib_info['structure']
                     })
                     
-                    # Copy library textures
                     lib_folder = os.path.dirname(lib_path)
-                    self.copy_library_textures(lib_info, lib_folder)
+                    tex_count = self.copy_library_textures(lib_info, lib_folder)
                     
                     self.report({'INFO'}, f"Published library: {lib_info['folder_name']}")
                     
                 except Exception as e:
                     self.report({'WARNING'}, f"Failed to publish library {lib_info['folder_name']}: {str(e)}")
             
-            # ================================================================
-            # STEP 4: Publish Master File
-            # ================================================================
-            master_info = files_to_publish['master']
-            
-            # Publish (overwrite mode - no versioning)
             published_path = self.publish_master_file(
-                source_path=master_info['source_path'],
-                target_folder=master_info['target_folder'],
+                source_path=current_file,
+                target_folder=master_target_folder,
                 context=context
             )
             
             self.report({'INFO'}, f"Published master file: {os.path.basename(published_path)}")
             
-            # ================================================================
-            # STEP 5: Copy Master File Textures
-            # ================================================================
-            target_textures = os.path.join(master_info['target_folder'], "textures")
+            target_textures = os.path.join(master_target_folder, "textures")
             os.makedirs(target_textures, exist_ok=True)
             
             copied_count = 0
-            if os.path.exists(master_info['textures_dir']) and self.textures_to_copy:
+            if os.path.exists(master_textures_dir) and self.textures_to_copy:
                 for tex_path in self.textures_to_copy:
                     tex_filename = os.path.basename(tex_path)
                     target_tex = os.path.join(target_textures, tex_filename)
                     shutil.copy2(tex_path, target_tex)
                     copied_count += 1
-            elif not os.path.exists(master_info['textures_dir']):
+            elif not os.path.exists(master_textures_dir):
                 self.report({'INFO'}, "No textures folder found - publishing without textures")
             
-            # ================================================================
-            # STEP 6: Write Logs
-            # ================================================================
+            if published_libraries:
+                relinked_count = self.relink_external_libraries(
+                    published_path, 
+                    published_libraries, 
+                    publish_path,
+                    context
+                )
+                if relinked_count > 0:
+                    self.report({'INFO'}, f"Relinked {relinked_count} external libraries")
+            
             status = "SUCCESS"
             notes = ""
             
@@ -1042,7 +994,6 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 status = "SUCCESS (FORCED)"
                 notes = f"{len(self.validation_warnings)} warnings ignored"
             
-            # Enhanced log with library info
             self.write_publish_log_v2(
                 publish_path=publish_path,
                 published_path=published_path,
@@ -1053,26 +1004,47 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 notes=notes
             )
             
-            # ================================================================
-            # STEP 7: Success Report
-            # ================================================================
             force_text = " (FORCED)" if self.is_forced else ""
             lib_text = f" + {len(published_libraries)} libraries" if published_libraries else ""
+            
+            unpacked_count = 0
+            
+            if context.scene.publish_auto_unpack:
+                try:
+                    blend_dir = os.path.dirname(bpy.data.filepath)
+                    textures_dir = os.path.join(blend_dir, "textures")
+                    
+                    os.makedirs(textures_dir, exist_ok=True)
+                    
+                    for img in bpy.data.images:
+                        if img.name in ('Render Result', 'Viewer Node'):
+                            continue
+                        if img.source != 'FILE':
+                            continue
+                        if img.packed_file:
+                            img.filepath = f"//textures/{img.name}"
+                            img.unpack(method='WRITE_LOCAL')
+                            unpacked_count += 1
+                    
+                    if unpacked_count > 0:
+                        bpy.ops.wm.save_mainfile()
+                except Exception as e:
+                    print(f"Warning: Auto-unpack failed: {e}")
+            
+            unpack_text = f" | Unpacked {unpacked_count} textures" if unpacked_count > 0 else ""
             
             self.report(
                 {'INFO'},
                 f"Published {self.asset_name}{force_text}{lib_text} | "
-                f"{copied_count} textures | Target: {master_info['target_folder']}"
+                f"{copied_count} textures | Target: {master_target_folder}{unpack_text}"
             )
             
-            # Reset flags
             context.scene.publish_force = False
             context.scene.publish_libraries_validated = False
             
             return {'FINISHED'}
             
         except Exception as e:
-            # Log failure
             try:
                 publish_path = context.scene.publish_path
                 self.write_publish_log(
@@ -1090,18 +1062,10 @@ class ASSET_OT_Publish(bpy.types.Operator):
     
     def write_publish_log_v2(self, publish_path, published_path, source_path, 
                             texture_count, linked_libraries, status, notes=""):
-        """
-        Enhanced publish log with linked libraries support (OVERWRITE mode).
-        
-        Format:
-        [timestamp] PUBLISH | Asset: name | Path: path | Source: path | Linked: X | Status: SUCCESS
-          └─ LINKED | Library: name | Structure: structure | Path: path
-        """
         log_file = os.path.join(publish_path, ".publish_activity.log")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         username = getpass.getuser()
         
-        # Main entry (no versioning info)
         log_entry = (
             f"[{timestamp}] PUBLISH | "
             f"Asset: {self.asset_name} | "
@@ -1118,7 +1082,6 @@ class ASSET_OT_Publish(bpy.types.Operator):
         
         log_entry += "\n"
         
-        # Add linked library entries
         for lib in linked_libraries:
             log_entry += (
                 f"  └─ LINKED | "
@@ -1142,22 +1105,88 @@ class ASSET_OT_CopyLibraryPath(bpy.types.Operator):
     """Copy library file path to clipboard"""
     bl_idname = "asset.copy_library_path"
     bl_label = "Copy Library Path"
-    bl_description = "Copy library file path to clipboard"
     bl_options = {'REGISTER'}
     
     library_path: StringProperty(name="Library Path")
     library_name: StringProperty(name="Library Name")
     
+    @classmethod
+    def description(cls, context, properties):
+        """Dynamic tooltip showing full path"""
+        if properties.library_path:
+            return f"Path: {properties.library_path}\n\nClick to copy path to clipboard"
+        return "Copy library file path to clipboard"
+    
     def execute(self, context):
         """Copy path to clipboard"""
         try:
-            # Copy to clipboard
             context.window_manager.clipboard = self.library_path
             
             self.report({'INFO'}, f"Copied path: {self.library_name}")
             return {'FINISHED'}
         except Exception as e:
             self.report({'ERROR'}, f"Failed to copy: {str(e)}")
+            return {'CANCELLED'}
+
+
+# =============================================================================
+# PROPERTY UPDATE CALLBACKS
+# =============================================================================
+
+def update_include_libraries(self, context):
+    """Auto-validate libraries when checkbox is toggled ON"""
+    if context.scene.publish_include_libraries:
+        from .check_publish import quick_validate_linked_libraries
+        
+        try:
+            total, errors, warnings = quick_validate_linked_libraries(context)
+            print(f"Auto-validated libraries: {total} total, {errors} errors, {warnings} warnings")
+        except Exception as e:
+            print(f"Auto-validation error: {e}")
+            context.scene.publish_libraries_validated = False
+    else:
+        context.scene.publish_libraries_validated = False
+        context.scene.publish_library_selection.clear()
+
+
+class ASSET_OT_ReloadLibrary(bpy.types.Operator):
+    """Reload linked library"""
+    bl_idname = "asset.reload_library"
+    bl_label = "Reload Library"
+    bl_description = "Reload linked library to update changes"
+    bl_options = {'REGISTER', 'UNDO'}
+    
+    library_path: StringProperty(name="Library Path")
+    
+    def execute(self, context):
+        """Reload library"""
+        if not self.library_path:
+            self.report({'ERROR'}, "No library path provided")
+            return {'CANCELLED'}
+        
+        import os
+        
+        target_path_norm = os.path.normpath(os.path.abspath(self.library_path))
+        
+        lib_to_reload = None
+        for lib in bpy.data.libraries:
+            lib_abs_path = bpy.path.abspath(lib.filepath)
+            lib_path_norm = os.path.normpath(os.path.abspath(lib_abs_path))
+            
+            if lib_path_norm == target_path_norm:
+                lib_to_reload = lib
+                break
+        
+        if not lib_to_reload:
+            self.report({'WARNING'}, "Library not loaded in current scene")
+            return {'CANCELLED'}
+        
+        try:
+            lib_to_reload.reload()
+            self.report({'INFO'}, f"Reloaded: {lib_to_reload.name}")
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to reload library: {str(e)}")
             return {'CANCELLED'}
 
 
@@ -1180,10 +1209,8 @@ class ASSET_OT_OpenLibraryFile(bpy.types.Operator):
             return {'CANCELLED'}
         
         try:
-            # Get Blender executable path
             blender_exe = bpy.app.binary_path
             
-            # Open in new instance
             subprocess.Popen([blender_exe, self.library_path])
             
             filename = os.path.basename(self.library_path)
@@ -1195,23 +1222,24 @@ class ASSET_OT_OpenLibraryFile(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+# =============================================================================
+# ADDON REGISTRATION
+# =============================================================================
+
 def register():
-    # Register PropertyGroup
     bpy.utils.register_class(LibrarySelectionItem)
     bpy.utils.register_class(ASSET_OT_Publish)
     bpy.utils.register_class(ASSET_OT_CopyLibraryPath)
+    bpy.utils.register_class(ASSET_OT_ReloadLibrary)
     bpy.utils.register_class(ASSET_OT_OpenLibraryFile)
     
     # ===== Publishing Settings =====
-    
-    # Publish structure for current file (auto-detected or manual)
     bpy.types.Scene.publish_structure = StringProperty(
         name="Publish Structure",
         description="Folder structure for publishing (e.g., 'sets/rumah'). Auto-detected from file location",
         default=""
     )
     
-    # Publish path (target root directory)
     bpy.types.Scene.publish_path = StringProperty(
         name="Publish Path",
         description="Root directory where assets will be published",
@@ -1219,7 +1247,6 @@ def register():
         default=""
     )
     
-    # Versioning mode
     bpy.types.Scene.publish_versioning_mode = EnumProperty(
         name="Versioning Mode",
         description="How to handle file versioning",
@@ -1230,28 +1257,35 @@ def register():
         default='OVERWRITE'
     )
     
-    # Force publish (bypass warnings)
     bpy.types.Scene.publish_force = BoolProperty(
         name="Force Publish",
         description="Bypass validation warnings (critical errors still block)",
         default=False
     )
     
-    # ===== Linked Libraries Settings =====
+    bpy.types.Scene.publish_auto_unpack = BoolProperty(
+        name="Auto-Unpack Packed Textures",
+        description="Automatically unpack packed textures to /textures folder after successful publish (recommended)",
+        default=True
+    )
     
-    # Include linked libraries toggle
-    bpy.types.Scene.publish_include_libraries = BoolProperty(
-        name="Include Linked Libraries",
-        description="Publish linked libraries together with current file",
+    bpy.types.Scene.publish_sync_to_master = BoolProperty(
+        name="Auto-sync to Master",
+        description="Also update master file (without _v suffix) when publishing versioned file",
         default=False
     )
     
-    # Library selection collection
+    bpy.types.Scene.publish_include_libraries = BoolProperty(
+        name="Include Linked Libraries",
+        description="Publish linked libraries together with current file",
+        default=False,
+        update=update_include_libraries
+    )
+    
     bpy.types.Scene.publish_library_selection = CollectionProperty(
         type=LibrarySelectionItem
     )
     
-    # Select all libraries checkbox
     bpy.types.Scene.publish_select_all_libraries = BoolProperty(
         name="Select All Libraries",
         description="Select or deselect all linked libraries",
@@ -1259,14 +1293,12 @@ def register():
         update=lambda self, context: toggle_all_libraries(context)
     )
     
-    # Libraries validated flag
     bpy.types.Scene.publish_libraries_validated = BoolProperty(
         name="Libraries Validated",
         description="Deep validation completed for linked libraries",
         default=False
     )
     
-    # Library validation results
     bpy.types.Scene.publish_library_count = IntProperty(
         name="Library Count",
         description="Total number of linked libraries found",
@@ -1285,7 +1317,6 @@ def register():
         default=0
     )
     
-    # Large texture count (for validation warning)
     bpy.types.Scene.publish_large_texture_count = IntProperty(
         name="Large Texture Count",
         description="Number of textures exceeding 4K resolution",
@@ -1294,35 +1325,24 @@ def register():
     
     # ===== NEW VALIDATION RESULTS =====
     
-    # High poly objects count
-    bpy.types.Scene.publish_highpoly_count = IntProperty(
-        name="High Poly Objects",
-        description="Number of objects exceeding polygon threshold",
-        default=0
-    )
-    
-    # Transform issues count
     bpy.types.Scene.publish_transform_issue_count = IntProperty(
         name="Transform Issues",
         description="Number of objects with unapplied transforms",
         default=0
     )
     
-    # Empty material slots count
     bpy.types.Scene.publish_empty_slots_count = IntProperty(
         name="Empty Material Slots",
         description="Number of objects with empty or unused material slots",
         default=0
     )
     
-    # Duplicate textures count
     bpy.types.Scene.publish_duplicate_texture_count = IntProperty(
         name="Duplicate Textures",
         description="Number of duplicate textures that can be optimized",
         default=0
     )
     
-    # Duplicate materials count
     bpy.types.Scene.publish_duplicate_material_count = IntProperty(
         name="Duplicate Materials",
         description="Number of duplicate materials that can be optimized",
@@ -1331,25 +1351,22 @@ def register():
 
 
 def toggle_all_libraries(context):
-    """Callback to select/deselect all libraries"""
     select_all = context.scene.publish_select_all_libraries
     for item in context.scene.publish_library_selection:
         item.selected = select_all
 
 
 def unregister():
-    # Unregister classes
     bpy.utils.unregister_class(ASSET_OT_OpenLibraryFile)
+    bpy.utils.unregister_class(ASSET_OT_ReloadLibrary)
     bpy.utils.unregister_class(ASSET_OT_CopyLibraryPath)
     bpy.utils.unregister_class(ASSET_OT_Publish)
     bpy.utils.unregister_class(LibrarySelectionItem)
     
-    # Delete scene properties
     del bpy.types.Scene.publish_duplicate_material_count
     del bpy.types.Scene.publish_duplicate_texture_count
     del bpy.types.Scene.publish_empty_slots_count
     del bpy.types.Scene.publish_transform_issue_count
-    del bpy.types.Scene.publish_highpoly_count
     del bpy.types.Scene.publish_large_texture_count
     del bpy.types.Scene.publish_library_warnings
     del bpy.types.Scene.publish_library_errors
@@ -1358,6 +1375,8 @@ def unregister():
     del bpy.types.Scene.publish_select_all_libraries
     del bpy.types.Scene.publish_library_selection
     del bpy.types.Scene.publish_include_libraries
+    del bpy.types.Scene.publish_auto_unpack
+    del bpy.types.Scene.publish_sync_to_master
     del bpy.types.Scene.publish_force
     del bpy.types.Scene.publish_versioning_mode
     del bpy.types.Scene.publish_path

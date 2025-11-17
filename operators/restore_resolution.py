@@ -10,7 +10,7 @@ class TEXTURE_OT_RestoreResolution(bpy.types.Operator):
 
     backup_folders_found = []
     total_backups = 0
-    backup_info = []  # Store info about backup resolutions
+    backup_info = [] 
 
     def invoke(self, context, event):
         if not bpy.data.filepath:

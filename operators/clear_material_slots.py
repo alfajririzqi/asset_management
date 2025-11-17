@@ -25,7 +25,6 @@ class MATERIAL_OT_ClearUnusedSlots(bpy.types.Operator):
             self.report({'INFO'}, "No unused material slots found")
             return {'CANCELLED'}
         
-        # Show confirmation dialog
         return context.window_manager.invoke_props_dialog(self, width=500)
     
     def draw(self, context):
@@ -40,7 +39,6 @@ class MATERIAL_OT_ClearUnusedSlots(bpy.types.Operator):
         
         layout.separator()
         
-        # Show objects and their unused slots with grid layout
         max_objects = 10
         obj_items = list(self.preview_data.items())[:max_objects]
         
@@ -94,10 +92,8 @@ class MATERIAL_OT_ClearUnusedSlots(bpy.types.Operator):
             # Find slots to remove (empty or unused)
             unused_slots = []
             for i, slot in enumerate(obj.material_slots):
-                # Empty slot
                 if slot.material is None:
                     unused_slots.append(("[Empty Slot]", 'empty'))
-                # Unused slot
                 elif i not in used_material_indices:
                     unused_slots.append((slot.material.name, 'unused'))
             
@@ -118,27 +114,21 @@ class MATERIAL_OT_ClearUnusedSlots(bpy.types.Operator):
             processed_objects += 1
             mesh = obj.data
             
-            # Get materials actually used by faces
             used_material_indices = set()
             for poly in mesh.polygons:
                 used_material_indices.add(poly.material_index)
             
-            # Find slots to remove (empty or unused)
             slots_to_remove = []
             for i, slot in enumerate(obj.material_slots):
-                # Remove if empty (None)
                 if slot.material is None:
                     slots_to_remove.append(i)
                     empty_slots_removed += 1
-                # Remove if not used by any face
                 elif i not in used_material_indices:
                     slots_to_remove.append(i)
                     unused_materials_removed += 1
             
-            # Remove slots from end to start (avoid index shifting)
             for slot_index in reversed(slots_to_remove):
                 obj.active_material_index = slot_index
-                # Use proper context
                 with context.temp_override(object=obj):
                     bpy.ops.object.material_slot_remove()
         

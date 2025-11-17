@@ -76,7 +76,6 @@ class FILE_PT_Versioning(bpy.types.Panel):
             col.enabled = False
 
         # Restore version section
-        layout.separator()
         box = layout.box()
         box.label(text="Restore Version", icon='FILE_REFRESH')
         
@@ -97,7 +96,6 @@ class FILE_PT_Versioning(bpy.types.Panel):
                 blends.sort(key=lambda f: os.path.getmtime(os.path.join(versions_dir, f)), reverse=True)
                 count = len(blends)
                 
-                layout.separator()
                 col = layout.column(align=True)
                 col.label(text=f"Available versions: {count}", icon='LINENUMBERS_ON')
                 

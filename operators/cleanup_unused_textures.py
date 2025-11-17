@@ -107,13 +107,11 @@ class TEXTURE_OT_CleanupUnusedTextures(bpy.types.Operator):
         failed = 0
 
         for tex_path in self.unused_textures:
-            # Validate file exists before processing
             if not os.path.exists(tex_path):
                 skipped += 1
                 print(f"Skipped (file not found): {os.path.basename(tex_path)}")
                 continue
             
-            # Check if file is accessible
             if not os.access(tex_path, os.R_OK):
                 failed += 1
                 self.report({'WARNING'}, f"No read permission: {os.path.basename(tex_path)}")
@@ -124,16 +122,14 @@ class TEXTURE_OT_CleanupUnusedTextures(bpy.types.Operator):
                     os.remove(tex_path)
                     processed += 1
                 else:
-                    # Create trash directory if needed
                     os.makedirs(trash_dir, exist_ok=True)
                     
                     filename = os.path.basename(tex_path)
                     dest_path = os.path.join(trash_dir, filename)
 
-                    # Handle filename conflicts
                     if os.path.exists(dest_path):
                         name, ext = os.path.splitext(filename)
-                        timestamp = int(time.time() * 1000)  # milliseconds for uniqueness
+                        timestamp = int(time.time() * 1000)  
                         dest_path = os.path.join(trash_dir, f"{name}_{timestamp}{ext}")
 
                     shutil.move(tex_path, dest_path)

@@ -1,7 +1,10 @@
 # Blender Asset Management Addon - Copilot Instructions
 
 ## 🎯 Addon Overview
-Production-ready Blender 4.0+ addon untuk asset management dengan fokus pada **publish workflow**, **texture optimization**, dan **versioning system**.
+Production-ready Blender 4.0+ addon untuk asset management dengan fokus pada **publish workflow**, **texture optimization**, **versioning system**, dan **linked library management**.
+
+**Current Version:** 1.5.0  
+**Release Date:** November 17, 2025
 
 ## 📐 Architecture
 
@@ -355,22 +358,112 @@ if img.size[0] > max_res or img.size[1] > max_res:
 4. Validation results displayed
 ```
 
-### Library Scan Logic (NO publish_path Required)
+### Library Scan Logic - Common Root Detection
 ```python
-# ❌ WRONG - Old logic required publish_path
-scanner = LinkedLibraryScanner(publish_path, max_depth=3)
-
-# ✅ CORRECT - Direct scan from bpy.data
-libraries = list(bpy.data.libraries)
+# Step 1: Separate by drive
+current_drive = os.path.splitdrive(current_file)[0]
 for lib in libraries:
-    lib_filepath = bpy.path.abspath(lib.filepath)
-    # Check: exists, readable, has textures folder
+    lib_drive = os.path.splitdrive(lib.filepath)[0]
+    if lib_drive == current_drive:
+        internal_lib_paths.append(lib.filepath)
+    else:
+        external_libs.append(lib.name)
+
+# Step 2: Find common root for internal libraries only
+common_root = os.path.commonpath(internal_lib_paths)
+
+# Step 3: Calculate structure for each library
+for lib_filepath in lib_filepaths:
+    if lib in external_libs or not lib_filepath.startswith(common_root):
+        # External library - preserve parent folder with _external/ prefix
+        parent_folder = os.path.basename(os.path.dirname(lib_filepath))
+        structure = f"_external/{parent_folder}"  # "_external/_backup"
+    else:
+        # Internal library - mirror structure (includes folder name!)
+        rel_path = os.path.relpath(lib_filepath, common_root)
+        structure = os.path.dirname(rel_path)  # "01_character/01_main/arkana"
 ```
 
 **Why NO publish_path:**
 - Checkbox depends on `publish_check_done`, NOT `publish_path`
 - Scan only needs current blend file's linked libraries
 - Publish_path only needed for ACTUAL PUBLISH, not validation
+
+### Structure Mirroring Logic
+```
+Master Folder (auto-detected common root):
+assets/
+  ├── char/main/arkana/arkana.blend          [lib]
+  └── set/sitemap/pohonWanamatu/
+      ├── pohonWanamatu.blend                [current]
+      └── pohonWanamatu_ground.blend         [lib]
+
+Publish Folder (mirrored structure):
+publish/
+  ├── 01_character/01_main/arkana/chr_arkana.blend    [copied]
+  ├── 04_set/sitemap/pohonWanamatu/pohonWanamatu.blend [published]
+  └── _external/_backup/ground_wanamatu.blend         [external from D:\_backup\]
+
+External Libraries (Option C+):
+publish/
+  └── _external/
+      └── _backup/                           [parent folder preserved]
+          ├── ground_wanamatu.blend          [copied]
+          └── textures/                      [textures preserved]
+```
+
+**External Library Handling:**
+- Detect: Library outside common root (different path or drive)
+- Copy: To `_external/{parent_folder}/` (preserves parent directory name)
+- Structure: `_external/_backup` for files in `D:\_backup\file.blend`
+- Preserve: Textures and folder structure (recursive copy with os.walk)
+- Skip: Hidden folders (.backup, .trash)
+- Result: External libs grouped in _external/ folder, internal libs mirror structure
+
+### Publish Execution Flow (publish.py)
+```python
+# STEP 1: Setup paths (calculate structure from common root)
+master_target_folder = os.path.join(publish_path, master_structure)
+
+# STEP 2: Publish linked libraries FIRST
+for lib_info in self.libraries_to_publish:
+    lib_path = self.publish_linked_library(lib_info, context)
+    self.copy_library_textures(lib_info, lib_folder)
+
+# STEP 3: Publish master file
+published_path = self.publish_master_file(current_file, master_target_folder, context)
+
+# STEP 4: Copy master textures
+target_textures = os.path.join(master_target_folder, "textures")
+
+# STEP 5: Relink external libraries (NEW!)
+relinked_count = self.relink_external_libraries(
+    published_path, published_libraries, publish_path, context
+)
+# Opens published file, updates library paths to relative paths, saves
+
+# STEP 6: Write logs
+```
+
+**Key Functions:**
+- `publish_linked_library(lib_info, context)`:
+  - Determines target folder from `lib_info['structure']`
+  - Internal: `publish_path/structure/` (structure already includes folder name)
+  - External: `publish_path/_external/parent_folder/` (preserves parent directory)
+  - Copies .blend file with `shutil.copy2()`
+  
+- `copy_library_textures(lib_info, target_folder)`:
+  - Uses `os.walk()` to recursively copy textures/
+  - Skips hidden folders (starts with '.')
+  - Preserves subfolder structure
+  - Returns copied texture count
+
+- `relink_external_libraries(blend_file, published_libs, publish_root, context)` (NEW):
+  - Opens published .blend file
+  - Relinks external libraries (_external/*) to new relative paths
+  - Calculates relative path from published file to _external/ location
+  - Saves file and reopens original
+  - Returns count of relinked libraries
 
 ### UI Enable Logic (publish_panel.py)
 ```python
@@ -421,6 +514,42 @@ elif not scene.publish_check_done:
 
 ## 📝 Recent Conversations & Decisions
 
+### 2025-11-14: Structure Mirroring & Common Root Detection
+
+**Context:** User reported publish system doesn't properly mirror folder structure from master folder, causing library path errors after publish.
+
+**Problem:**
+```
+Master: assets/set/sitemap/pohonWanamatu/pohonWanamatu.blend
+        assets/char/main/arkana/arkana.blend [linked]
+
+Publish: publish/set/sitemap/pohonWanamatu/pohonWanamatu.blend
+         publish/??? [structure broken, paths error]
+```
+
+**Solution - Auto-Detect Common Root:**
+1. Scan current file + all linked libraries
+2. Find common root folder (shared parent)
+3. Extract structure relative to common root
+4. Mirror exact structure to publish folder
+5. External libs (outside common root) → copy to `_external/{folder_name}/`
+
+**Key Decisions:**
+1. **Auto-detection only:** No manual structure setting, detect from file paths
+2. **Common root algorithm:** Use `os.path.commonpath()` to find shared parent
+3. **Structure preservation:** Mirror exact folder hierarchy from common root
+4. **External library handling (Option C+):**
+   - Copy entire folder to `_external/{folder_name}/`
+   - Preserve textures and subfolders
+   - Auto-relink with relative paths
+5. **Error on different drives:** Show error if external lib on different drive (cannot find common root)
+
+**Files Modified:**
+- `operators/check_publish.py`: Added common root detection in `quick_validate_linked_libraries()`
+- `.github/copilot-instructions.md`: Documented structure mirroring logic
+
+---
+
 ### 2025-11-09: Addon Preferences & Validation System Overhaul
 
 **Context:** User requested professional addon preferences with validation customization.
@@ -446,6 +575,89 @@ elif not scene.publish_check_done:
 
 ---
 
-**Last Updated:** 2025-11-09  
+### 2025-11-17: v1.5 Release - Auto-Validation & Reload Library
+
+**Context:** User requested removal of manual "Scan & Validate Libraries" button and fix for reload library functionality.
+
+**Key Decisions:**
+1. **Auto-Validation on Checkbox:** Move validation logic to `publish_include_libraries` property's `update` function
+2. **Remove Manual Button:** Delete separate "Scan & Validate Libraries" button from UI
+3. **Reload Library Fix:** Implement path normalization for relative/absolute path matching
+4. **UI Improvements:** Remove excessive separators to prevent white space when no errors
+
+**Implementation:**
+
+**1. Auto-Validation Pattern:**
+```python
+def update_include_libraries(self, context):
+    """Auto-validate libraries when checkbox is toggled ON"""
+    if context.scene.publish_include_libraries:
+        from .check_publish import quick_validate_linked_libraries
+        total, errors, warnings = quick_validate_linked_libraries(context)
+    else:
+        # Reset when unchecked
+        context.scene.publish_libraries_validated = False
+        context.scene.publish_library_selection.clear()
+
+# Property with update function
+bpy.types.Scene.publish_include_libraries = BoolProperty(
+    name="Include Linked Libraries",
+    default=False,
+    update=update_include_libraries  # Auto-trigger validation
+)
+```
+
+**2. Reload Library Path Normalization:**
+```python
+# Panel UI - normalize paths before comparison
+item_path_norm = os.path.normpath(os.path.abspath(item.filepath))
+lib_path_norm = os.path.normpath(os.path.abspath(lib_path_abs))
+
+if lib_path_norm == item_path_norm:
+    reload_op = row.operator("asset.reload_library", ...)
+    reload_op.library_path = item.filepath
+
+# Operator - normalize paths in execute
+target_path_norm = os.path.normpath(os.path.abspath(self.library_path))
+lib_path_norm = os.path.normpath(os.path.abspath(lib_abs_path))
+
+if lib_path_norm == target_path_norm:
+    lib_to_reload.reload()  # Match found!
+```
+
+**Why Path Normalization:**
+- Handles relative paths: `//..\..\character\chr.blend`
+- Handles absolute paths: `G:\assets\character\chr.blend`
+- Handles mixed slashes: `/` vs `\`
+- Blender libraries use relative paths by default
+
+**3. UI Improvements:**
+- Removed separator after checkbox (prevents white space when no libraries)
+- Validation results show immediately on checkbox toggle
+- No manual scan button needed
+
+**New User Flow:**
+```
+1. Run "Check Publish Readiness" ✓
+2. Check "Publish Linked Libraries" → Auto-validates instantly ⚡
+3. Results appear immediately (no scan button)
+4. Reload button works for all libraries (path normalization)
+```
+
+**Files Modified:**
+- `operators/publish.py`: Added `update_include_libraries()` function, path normalization in reload operator
+- `panels/publish_panel.py`: Removed scan button, added path normalization for reload button
+- `__init__.py`: Library selection reset on file load (already exists)
+
+**Benefits:**
+- ✅ Faster workflow (1 less click)
+- ✅ More intuitive (checkbox = action)
+- ✅ Cleaner UI (no white space)
+- ✅ Reliable reload (path normalization)
+
+---
+
+**Last Updated:** 2025-11-17  
+**Version:** 1.5.0  
 **Blender Version:** 4.0+  
 **Python Version:** 3.10+

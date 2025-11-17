@@ -13,10 +13,6 @@ class ASSET_OT_optimize_texture_duplicates(bpy.types.Operator):
 
     def get_sort_key(self, img):
         """Return a sort key for image selection.
-
-        Priority:
-        - (0, 0) for names without a three-digit numeric suffix (preferred)
-        - (1, n) for names with a three-digit numeric suffix like '.001' (lower priority)
         """
         name = img.name
         parts = name.rsplit('.', 1)
@@ -52,7 +48,6 @@ class ASSET_OT_optimize_texture_duplicates(bpy.types.Operator):
         
         layout.separator()
         
-        # Show first few groups with grid layout
         max_groups = 15
         for i, group in enumerate(self.duplicate_groups[:max_groups]):
             if i > 0:
@@ -61,17 +56,15 @@ class ASSET_OT_optimize_texture_duplicates(bpy.types.Operator):
             base = group[0]
             layout.label(text=f"Base: {base.name}", icon='TEXTURE')
             
-            # Grid layout for duplicates (2 columns)
             duplicates = group[1:]
             if duplicates:
                 grid = layout.grid_flow(row_major=True, columns=2, align=True)
                 grid.scale_y = 0.8
                 
-                max_display = 6  # Show max 6 duplicates per group
+                max_display = 6  
                 for img in duplicates[:max_display]:
                     grid.label(text=f"→ {img.name}", icon='LINKED')
                 
-                # Show "more items" if list is long
                 if len(duplicates) > max_display:
                     layout.label(text=f"  ... and {len(duplicates) - max_display} more", icon='THREE_DOTS')
         

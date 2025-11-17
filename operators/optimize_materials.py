@@ -172,7 +172,6 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
         props.append(('roughness', round(material.roughness, 6)))
         props.append(('use_nodes', material.use_nodes))
         
-        # If using nodes, deeply analyze node tree
         if material.use_nodes and material.node_tree:
             node_data = []
             
@@ -236,7 +235,6 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
         
         layout.separator()
         
-        # Show first few groups with grid layout
         max_groups = 15
         for i, group in enumerate(self.duplicate_groups[:max_groups]):
             if i > 0:
@@ -245,13 +243,12 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
             base = group[0]
             layout.label(text=f"Base: {base.name}", icon='MATERIAL')
             
-            # Grid layout for duplicates (2 columns)
             duplicates = group[1:]
             if duplicates:
                 grid = layout.grid_flow(row_major=True, columns=2, align=True)
                 grid.scale_y = 0.8
                 
-                max_display = 6  # Show max 6 duplicates per group
+                max_display = 6  
                 for mat in duplicates[:max_display]:
                     grid.label(text=f"→ {mat.name}", icon='LINKED')
                 

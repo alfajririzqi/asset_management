@@ -9,7 +9,7 @@
 [![Blender](https://img.shields.io/badge/Blender-4.0+-orange?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-green)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-brightgreen)](https://github.com/alfajririzqi/asset_management/releases)
+[![Version](https://img.shields.io/badge/Version-1.5.0-brightgreen)](https://github.com/alfajririzqi/asset_management/releases)
 [![Free](https://img.shields.io/badge/💎-100%25_FREE-success)](https://github.com/alfajririzqi/asset_management)
 
 [✨ Features](#-features) • [📥 Installation](#-installation) • [🚀 Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [💬 Support](#-support)
@@ -137,11 +137,16 @@ Stop wasting time on manual asset publishing and texture cleanup. This addon aut
 - Centralized logging (`.publish_activity.log`)
 - Linked library support (optional)
 
-**Linked Libraries:**
+**Linked Libraries (NEW in v1.5):**
+- ✨ Auto-validation on checkbox toggle (no separate scan button)
+- ✨ Reload library button for live updates
 - Include/exclude in publish
-- Validate library paths
-- Deep copy library assets
+- Validate library paths with structure preview
+- Deep copy library assets with folder mirroring
 - Texture consolidation for libraries
+- External library detection (different drives)
+- Smart path normalization (relative/absolute)
+- ⚠️ **Limitation:** Only supports 1 level of nesting (link-in-link not supported)
 
 ---
 
@@ -521,7 +526,7 @@ This addon is **100% free** and always will be. If you'd like to support develop
 
 ## 🗺️ Roadmap
 
-### v1.0 (Current) ✅
+### v1.5 (Current) ✅
 - ✅ Complete publishing system with validation
 - ✅ Texture optimization & consolidation tools
 - ✅ Automatic version control
@@ -529,6 +534,10 @@ This addon is **100% free** and always will be. If you'd like to support develop
 - ✅ High-poly & transform analysis
 - ✅ Material & asset optimization
 - ✅ Batch rename with patterns
+- ✅ **NEW:** Auto-validation for linked libraries
+- ✅ **NEW:** Reload library button with path normalization
+- ✅ **NEW:** Improved publish dialog UI (table layouts)
+- ✅ **NEW:** Smart library structure mirroring
 
 **Status:** Production-ready, 100% FREE forever
 
@@ -758,6 +767,6 @@ Made by [Rizqi Alfajri](https://github.com/alfajririzqi) for Blender Artists Wor
 
 ---
 
-**Version 2.0.0** • Last Updated: November 4, 2025 • Blender 4.0+
+**Version 1.5.0** • Last Updated: November 17, 2025 • Blender 4.0+
 
 </div>

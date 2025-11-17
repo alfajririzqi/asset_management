@@ -1,11 +1,14 @@
-import bpy, threading, os
+import bpy
+import threading
+import os
 from datetime import datetime
 
+
 class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
-    """Analyze scene deeply - Generate 4 detailed reports: Data Usage (overview), Material Usage, Texture Usage, and Texture Paths"""
+    """Analyze scene deeply and generate detailed reports"""
     bl_idname = "scene.analyze_deep"
     bl_label = "Analyze Scene Deeply"
-    bl_description = "Generate comprehensive reports with hybrid formatting for better readability"
+    bl_description = "Generate comprehensive reports for materials, textures, and usage statistics"
     bl_options = {'REGISTER'}
 
     _timer = None
@@ -26,7 +29,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                 if self._reports_data.get('success'):
                     self._create_text_datablocks_main_thread()
                     
-                    # Show completion dialog using separate operator
                     bpy.ops.scene.show_analysis_result('INVOKE_DEFAULT')
                     
                     return {'FINISHED'}
@@ -83,13 +85,11 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
     def _create_text_datablocks_main_thread(self):
         """Create text datablocks and optionally save to files"""
         for report in self._reports_data.get('reports', []):
-            # Create text datablock
             if report['name'] in bpy.data.texts:
                 bpy.data.texts.remove(bpy.data.texts[report['name']])
             text = bpy.data.texts.new(report['name'])
             text.write(report['content'])
         
-        # Auto-save to file if enabled in preferences
         try:
             prefs = bpy.context.preferences.addons[__package__.split('.')[0]].preferences
             if prefs.analysis_auto_save:
@@ -99,19 +99,15 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
     
     def _save_reports_to_file(self):
         """Save reports to /reports folder in blend file directory"""
-        import os
-        
         if not bpy.data.filepath:
             return
         
-        # Create reports folder
         blend_dir = os.path.dirname(bpy.data.filepath)
         reports_dir = os.path.join(blend_dir, "reports")
         
         if not os.path.exists(reports_dir):
             os.makedirs(reports_dir)
         
-        # Save each report as .txt file (overwrite)
         for report in self._reports_data.get('reports', []):
             filename = f"{report['name']}.txt"
             filepath = os.path.join(reports_dir, filename)
@@ -126,7 +122,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
     def _generate_texture_paths_report(self):
         """Generate texture paths report with resolution and relative/absolute paths"""
         lines = []
-        lines.append("=" * 60)
         lines.append("📁 TEXTURE PATHS REPORT")
         lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
@@ -135,7 +130,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         blend_dir = os.path.dirname(bpy.data.filepath)
         textures_dir = os.path.join(blend_dir, "textures")
 
-        # Collect all images from bpy.data.images
         found_images = []
         missing_images = []
         packed_images = []
@@ -147,7 +141,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             if img.source == 'GENERATED':
                 continue
             
-            # Check if from linked library
             if img.library:
                 lib_path = img.library.filepath
                 if lib_path not in linked_library_images:
@@ -191,7 +184,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                     else:
                         display_path = abs_path
                     
-                    # Get file size
                     try:
                         file_size = os.path.getsize(abs_path)
                         if file_size < 1024:
@@ -228,7 +220,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             # Scan for image files
             image_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.tiff', '.webp', '.exr', '.hdr', '.dds'}
             for root, dirs, files in os.walk(textures_dir):
-                # Skip .backup folder
                 if '.backup' in root:
                     continue
                 for file in files:
@@ -238,7 +229,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                         if file_path not in used_files:
                             rel_from_textures = os.path.relpath(file_path, textures_dir)
                             
-                            # Get file size
                             try:
                                 file_size = os.path.getsize(file_path)
                                 if file_size < 1024:
@@ -255,7 +245,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                                 'size': size_str
                             })
 
-        # Build report with statistics
         lines.append(f"Total Textures in Blend: {len(found_images) + len(missing_images) + len(packed_images)}")
         lines.append(f"Linked Library Textures: {sum(len(imgs) for imgs in linked_library_images.values())}")
         lines.append(f"Unused Textures in Folder: {len(unused_textures)}")
@@ -263,18 +252,15 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         lines.append("=" * 60)
         lines.append("")
         
-        # === CURRENT FILE ===
         lines.append("=== CURRENT FILE ===")
         lines.append("")
         
-        # Found images (current file)
         if found_images:
             lines.append("[FOUND - Current File]")
             for img in sorted(found_images, key=lambda x: x['path']):
                 lines.append(f"  • {img['path']} == ({img['resolution']}) [{img['size']}]")
             lines.append("")
 
-        # Missing images (current file)
         if missing_images:
             lines.append("[MISSING - Current File]")
             for img in sorted(missing_images, key=lambda x: x['path']):
@@ -282,31 +268,24 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                 lines.append(f"    Expected: {img['abs_path']}")
             lines.append("")
 
-        # Packed images (current file)
         if packed_images:
             lines.append("[PACKED - Current File]")
             for img in sorted(packed_images, key=lambda x: x['name']):
                 lines.append(f"  • 📦 {img['name']} == ({img['resolution']})")
             lines.append("")
 
-        # Unused textures in folder (current file)
         if unused_textures:
             lines.append("[UNUSED IN FOLDER /textures]")
             for tex in sorted(unused_textures, key=lambda x: x['path']):
                 lines.append(f"  • {tex['path']} [{tex['size']}]")
             lines.append("")
 
-        # === LINKED LIBRARIES ===
         if linked_library_images:
             lines.append("-" * 60)
             lines.append("")
             lines.append("[LINKED LIBRARIES]")
             for lib_path, images in sorted(linked_library_images.items()):
-                # Display library path
-                if lib_path.startswith('//'):
-                    lib_display = lib_path
-                else:
-                    lib_display = lib_path
+                lib_display = lib_path if lib_path.startswith('//') else lib_path
                 
                 lines.append(f"Library: {lib_display}")
                 
@@ -326,13 +305,11 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
     def _generate_data_usage_report(self):
         """Generate concise overview report with statistics and warnings"""
         lines = []
-        lines.append("=" * 60)
         lines.append("SCENE DATA USAGE REPORT")
         lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
         lines.append("")
 
-        # Count statistics
         total_objects = len([obj for obj in bpy.data.objects if obj.type == 'MESH'])
         total_materials = len(bpy.data.materials)
         total_textures = len([img for img in bpy.data.images 
@@ -344,7 +321,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         lines.append(f"  • Total Textures: {total_textures}")
         lines.append("")
 
-        # Analyze material and texture usage
         material_usage = {}
         texture_usage = {}
         
@@ -359,7 +335,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                     if obj.name not in material_usage[mat.name]:
                         material_usage[mat.name].append(obj.name)
                     
-                    # Get textures from material
                     if mat.use_nodes and mat.node_tree:
                         for node in mat.node_tree.nodes:
                             if node.type == 'TEX_IMAGE' and node.image:
@@ -368,13 +343,11 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                                 if mat.name not in texture_usage[node.image.name]:
                                     texture_usage[node.image.name].append(mat.name)
 
-        # Count orphans
         orphan_materials = [mat.name for mat in bpy.data.materials if mat.name not in material_usage]
         orphan_textures = [img.name for img in bpy.data.images 
                           if img.source == 'FILE' and img.name not in ('Render Result', 'Viewer Node') 
                           and img.name not in texture_usage]
 
-        # Warnings section
         has_warnings = False
         if orphan_materials or orphan_textures:
             lines.append("⚠️  WARNINGS:")
@@ -386,7 +359,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                 lines.append(f"  • {len(orphan_textures)} textures not used in any material")
             lines.append("")
 
-        # Linked libraries count
         linked_collections = {}
         for collection in bpy.data.collections:
             if collection.library:
@@ -402,7 +374,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             lines.append(f"  • {len(linked_collections)} linked library file(s)")
             lines.append("")
 
-        # Footer with references to detailed reports
         lines.append("-" * 60)
         lines.append("📋 DETAILED REPORTS AVAILABLE:")
         lines.append("  → Scene_MaterialUsage  (Material assignments per object)")
@@ -416,13 +387,11 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
     def _generate_material_usage_report(self):
         """Generate material usage report with hybrid formatting, grouped by source file"""
         lines = []
-        lines.append("=" * 60)
         lines.append("📦 MATERIAL USAGE REPORT")
         lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
         lines.append("")
 
-        # Collect material usage
         material_usage = {}
         
         for obj in bpy.data.objects:
@@ -436,9 +405,8 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                     if obj.name not in material_usage[mat.name]:
                         material_usage[mat.name].append(obj.name)
 
-        # Group materials by source (current file vs linked libraries)
         current_file_materials = []
-        linked_materials = {}  # {library_path: [materials]}
+        linked_materials = {}
         
         for mat in bpy.data.materials:
             if mat.library:
@@ -449,7 +417,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             else:
                 current_file_materials.append(mat)
 
-        # Count statistics
         total_materials = len(bpy.data.materials)
         used_materials = len(material_usage)
         orphan_materials = total_materials - used_materials
@@ -462,7 +429,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         lines.append("=" * 60)
         lines.append("")
 
-        # === CURRENT FILE ===
         lines.append("=== CURRENT FILE ===")
         lines.append(f"Materials: {len(current_file_materials)}")
         lines.append("")
@@ -479,7 +445,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             lines.append("No materials in current file")
             lines.append("")
 
-        # === LINKED LIBRARIES ===
         if linked_materials:
             for lib_path in sorted(linked_materials.keys()):
                 lines.append("-" * 60)
@@ -501,13 +466,11 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
     def _generate_texture_usage_report(self):
         """Generate texture usage report with hybrid formatting, grouped by source file"""
         lines = []
-        lines.append("=" * 60)
         lines.append("🖼️  TEXTURE USAGE REPORT")
         lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         lines.append("=" * 60)
         lines.append("")
 
-        # Collect texture usage
         texture_usage = {}
         
         for mat in bpy.data.materials:
@@ -521,12 +484,11 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                     if mat.name not in texture_usage[img_name]:
                         texture_usage[img_name].append(mat.name)
 
-        # Group textures by source (current file vs linked libraries)
         all_textures = [img for img in bpy.data.images 
                        if img.source == 'FILE' and img.name not in ('Render Result', 'Viewer Node')]
         
         current_file_textures = []
-        linked_textures = {}  # {library_path: [textures]}
+        linked_textures = {}
         
         for img in all_textures:
             if img.library:
@@ -537,7 +499,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             else:
                 current_file_textures.append(img)
 
-        # Count statistics
         total_textures = len(all_textures)
         used_textures = len(texture_usage)
         orphan_textures = total_textures - used_textures
@@ -550,7 +511,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         lines.append("=" * 60)
         lines.append("")
 
-        # === CURRENT FILE ===
         lines.append("=== CURRENT FILE ===")
         lines.append(f"Textures: {len(current_file_textures)}")
         lines.append("")
@@ -567,7 +527,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             lines.append("No textures in current file")
             lines.append("")
 
-        # === LINKED LIBRARIES ===
         if linked_textures:
             for lib_path in sorted(linked_textures.keys()):
                 lines.append("-" * 60)
@@ -587,27 +546,13 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         return "\n".join(lines)
 
     def _format_usage_hybrid(self, item_name, usage_list, category="items", threshold=5, emoji=""):
-        """
-        Smart hybrid formatting based on list length
-        
-        Args:
-            item_name: Name of the item (material/texture)
-            usage_list: List of items using this resource
-            category: Category name for display (objects/materials)
-            threshold: Max items for horizontal format (default: 5)
-            emoji: Emoji prefix for the item (e.g., 📦 for materials, 🖼️ for textures)
-        
-        Returns:
-            Formatted string with hybrid layout
-        """
+        """Smart hybrid formatting based on list length"""
         count = len(usage_list)
         
-        # Horizontal format for items ≤ threshold
         if count <= threshold:
             items_str = ", ".join(usage_list)
             return f"{emoji}{item_name}: Used by {count} {category} [{items_str}]"
         
-        # Vertical format for items > threshold
         lines = [f"{emoji}{item_name}: Used by {count} {category}"]
         for i, item in enumerate(usage_list):
             if i < count - 1:
@@ -639,7 +584,6 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
         lines.append("-" * 60)
         lines.append("")
 
-        # Track material usage
         material_usage = {}  
         texture_usage = {}   
 
@@ -736,18 +680,16 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
             lines.append("")
             
             for lib_path, collections in sorted(linked_collections.items()):
-                # Display library path
                 if lib_path.startswith('//'):
                     lib_display = lib_path
                 else:
                     lib_display = lib_path
                 
-                # Use first collection name as library display name
                 lib_name = collections[0] if collections else "Unknown"
                 
                 lines.append(f"Library: {lib_name}")
                 lines.append(f"    └─ {lib_display}")
-                lines.append("")  # Empty line between libraries
+                lines.append("")  
         
         lines.append("")
         lines.append("=" * 60)
@@ -797,7 +739,6 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
         
         layout.separator()
         
-        # Preview Scene_MaterialUsage Report
         if "Scene_MaterialUsage" in bpy.data.texts:
             mat_report = bpy.data.texts["Scene_MaterialUsage"]
             content = mat_report.as_string()
@@ -809,11 +750,10 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
             col = box.column(align=True)
             col.scale_y = 0.7
             
-            # Skip header and show first few materials (both horizontal and vertical formats)
             preview_count = 0
             start_showing = False
             skipped_lines = 0
-            max_preview_lines = 10  # Maximum lines to preview in dialog
+            max_preview_lines = 10 
             
             for i, line in enumerate(lines):
                 if not start_showing:
@@ -823,14 +763,12 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
                     continue
                 
                 if preview_count < max_preview_lines:
-                    # Show line if it's not empty or if it's a separator
                     if line.strip() or preview_count == 0:
                         col.label(text=line)
                         preview_count += 1
                 else:
                     break
             
-            # Show "more lines" indicator
             if len(lines) - skipped_lines > max_preview_lines:
                 remaining = len(lines) - skipped_lines - max_preview_lines
                 box.separator()
@@ -839,7 +777,6 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
         
         layout.separator()
         
-        # Preview Scene_TextureUsage Report
         if "Scene_TextureUsage" in bpy.data.texts:
             tex_usage_report = bpy.data.texts["Scene_TextureUsage"]
             content = tex_usage_report.as_string()
@@ -851,11 +788,10 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
             col = box.column(align=True)
             col.scale_y = 0.7
             
-            # Skip header and show first few textures (both horizontal and vertical formats)
             preview_count = 0
             start_showing = False
             skipped_lines = 0
-            max_preview_lines = 10  # Maximum lines to preview in dialog
+            max_preview_lines = 10  
             
             for i, line in enumerate(lines):
                 if not start_showing:
@@ -865,14 +801,12 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
                     continue
                 
                 if preview_count < max_preview_lines:
-                    # Show line if it's not empty or if it's a separator
                     if line.strip() or preview_count == 0:
                         col.label(text=line)
                         preview_count += 1
                 else:
                     break
             
-            # Show "more lines" indicator
             if len(lines) - skipped_lines > max_preview_lines:
                 remaining = len(lines) - skipped_lines - max_preview_lines
                 box.separator()
@@ -881,7 +815,6 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
         
         layout.separator()
         
-        # Preview Scene_TexturePaths Report
         if "Scene_TexturePaths" in bpy.data.texts:
             texture_report = bpy.data.texts["Scene_TexturePaths"]
             content = texture_report.as_string()
@@ -893,11 +826,10 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
             col = box.column(align=True)
             col.scale_y = 0.7
             
-            # Skip stats and show first section (any format)
             preview_count = 0
             start_showing = False
             skipped_lines = 0
-            max_preview_lines = 10  # Maximum lines to preview in dialog
+            max_preview_lines = 10 
             
             for i, line in enumerate(lines):
                 if not start_showing:
@@ -907,14 +839,12 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
                     continue
                 
                 if preview_count < max_preview_lines:
-                    # Show line if it's not empty or if it's a separator
                     if line.strip() or preview_count == 0:
                         col.label(text=line)
                         preview_count += 1
                 else:
                     break
             
-            # Show "more lines" indicator
             if len(lines) - skipped_lines > max_preview_lines:
                 remaining = len(lines) - skipped_lines - max_preview_lines
                 box.separator()
@@ -923,7 +853,6 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
         
         layout.separator()
         
-        # Info message - how to access full reports
         info_box = layout.box()
         info_col = info_box.column(align=True)
         info_col.scale_y = 0.8
