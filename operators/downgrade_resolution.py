@@ -39,8 +39,15 @@ class TEXTURE_OT_DowngradeResolution(bpy.types.Operator):
             layout.label(text="Backups saved as: filename.png.hires", icon='INFO')
         layout.separator()
         layout.label(text="Original files will be overwritten!", icon='ERROR')
+        layout.separator()
+        layout.label(text="Note: External & packed textures will be skipped", icon='INFO')
     
     def execute(self, context):
+        from ..utils.texture_detector import detect_external_and_packed_textures
+        
+        # Detect textures to skip
+        external_imgs, packed_imgs, local_imgs = detect_external_and_packed_textures(context)
+        
         if self.resolution == '2K':
             target_size = 2048
         elif self.resolution == '1K':
@@ -50,6 +57,8 @@ class TEXTURE_OT_DowngradeResolution(bpy.types.Operator):
         
         downgraded = 0
         skipped = 0
+        skipped_external = 0
+        skipped_packed = 0
         errors = 0
         udim_skipped = 0
         
@@ -59,6 +68,17 @@ class TEXTURE_OT_DowngradeResolution(bpy.types.Operator):
             if img.source != 'FILE':
                 skipped += 1
                 continue
+            
+            # Skip external textures
+            if img.name in external_imgs:
+                skipped_external += 1
+                continue
+            
+            # Skip packed textures
+            if img.name in packed_imgs:
+                skipped_packed += 1
+                continue
+            
             if hasattr(img, "tiles") and len(img.tiles) > 1:
                 udim_skipped += 1
                 skipped += 1
@@ -108,16 +128,33 @@ class TEXTURE_OT_DowngradeResolution(bpy.types.Operator):
         
         msg = f"Downgraded: {downgraded}"
         if skipped > 0:
-            msg += f" • Skipped: {skipped - udim_skipped}"
+            msg += f" | Skipped: {skipped - udim_skipped}"
         if udim_skipped > 0:
-            msg += f" • UDIM skipped: {udim_skipped}"
+            msg += f" | UDIM: {udim_skipped}"
+        if skipped_external > 0:
+            msg += f" | External: {skipped_external}"
+        if skipped_packed > 0:
+            msg += f" | Packed: {skipped_packed}"
         if errors > 0:
-            msg += f" • Errors: {errors}"
+            msg += f" | Errors: {errors}"
         
         if downgraded > 0:
             self.report({'INFO'}, msg)
         else:
             self.report({'WARNING'}, msg)
+        
+        # Log activity
+        from ..utils.activity_logger import log_activity
+        target = f"{target_size}px"
+        details = f"Target: {target} | Processed: {downgraded}"
+        if skipped_external > 0:
+            details += f" | External: {skipped_external}"
+        if skipped_packed > 0:
+            details += f" | Packed: {skipped_packed}"
+        if errors > 0:
+            details += f" | Errors: {errors}"
+        
+        log_activity("DOWNGRADE_RESOLUTION", details, context)
         
         return {'FINISHED'}
 

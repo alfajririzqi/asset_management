@@ -8,7 +8,6 @@ def quick_validate_linked_libraries(context):
     context.scene.publish_library_selection.clear()
     
     try:
-        # Get all linked libraries directly from bpy.data
         libraries = list(bpy.data.libraries)
         
         total_count = len(libraries)
@@ -117,12 +116,16 @@ def quick_validate_linked_libraries(context):
                     errors.append(f"Cannot read file: {str(e)}")
                     error_count += 1
                 
+                # Check if library is a published file
+                from ..utils.published_file_detector import detect_library_published_status
+                is_lib_published, lib_source = detect_library_published_status(lib_filepath)
+                if is_lib_published:
+                    errors.append(f"Published file (Source: {lib_source})")
+                    error_count += 1
+                
                 lib_dir = os.path.dirname(lib_filepath)
                 textures_dir = os.path.join(lib_dir, "textures")
-                if not os.path.exists(textures_dir):
-                    warnings.append("No textures folder")
-                    warning_count += 1
-                else:
+                if os.path.exists(textures_dir):
                     item.has_textures = True
             
             if errors:

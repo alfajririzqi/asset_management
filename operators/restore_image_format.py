@@ -69,11 +69,13 @@ class TEXTURE_OT_RestoreImageFormat(bpy.types.Operator):
             self.report({'INFO'}, "No format backup files (.fmt) found")
             return {'CANCELLED'}
 
-        return context.window_manager.invoke_props_dialog(self)
+        return context.window_manager.invoke_props_dialog(self, width=500)
 
     def draw(self, context):
         layout = self.layout
         layout.label(text=f"Found {self.total_backups} backup file(s) in {len(self.backup_folders_found)} location(s)", icon='INFO')
+        layout.separator()
+        layout.label(text="Note: External & packed textures will be skipped", icon='INFO')
 
         if len(self.backup_folders_found) <= 3:
             for backup_dir in self.backup_folders_found:
@@ -111,8 +113,15 @@ class TEXTURE_OT_RestoreImageFormat(bpy.types.Operator):
         layout.label(text="Backup files (*.fmt) will be deleted", icon='ERROR')
 
     def execute(self, context):
+        from ..utils.texture_detector import detect_external_and_packed_textures
+        
+        # Detect textures to skip
+        external_imgs, packed_imgs, local_imgs = detect_external_and_packed_textures(context)
+        
         restored = 0
         skipped = 0
+        skipped_external = 0
+        skipped_packed = 0
         failed = 0
         deleted_converted = 0
         blend_dir = os.path.dirname(bpy.data.filepath)
@@ -135,6 +144,27 @@ class TEXTURE_OT_RestoreImageFormat(bpy.types.Operator):
                             potential = os.path.join(parent_dir, root_name + ext)
                             if os.path.exists(potential):
                                 converted_files.append(potential)
+                    
+                    # Check if corresponding image is external or packed
+                    should_skip = False
+                    check_paths = [os.path.normpath(restore_path)] + [os.path.normpath(f) for f in converted_files]
+                    for img in bpy.data.images:
+                        if img.source != 'FILE':
+                            continue
+                        if img.filepath:
+                            img_abs = os.path.normpath(bpy.path.abspath(img.filepath))
+                            if img_abs in check_paths:
+                                if img.name in external_imgs:
+                                    skipped_external += 1
+                                    should_skip = True
+                                    break
+                                elif img.name in packed_imgs:
+                                    skipped_packed += 1
+                                    should_skip = True
+                                    break
+                    
+                    if should_skip:
+                        continue
 
                     if os.path.exists(restore_path):
                         skipped += 1
@@ -164,13 +194,32 @@ class TEXTURE_OT_RestoreImageFormat(bpy.types.Operator):
 
         msg = f"Restored {restored} file(s)"
         if deleted_converted > 0:
-            msg += f" • Deleted {deleted_converted} converted file(s)"
+            msg += f" | Deleted {deleted_converted} converted"
         if skipped > 0:
-            msg += f" • Skipped {skipped}"
+            msg += f" | Skipped {skipped}"
+        if skipped_external > 0:
+            msg += f" | External {skipped_external}"
+        if skipped_packed > 0:
+            msg += f" | Packed {skipped_packed}"
         if failed > 0:
-            msg += f" • Failed {failed}"
+            msg += f" | Failed {failed}"
 
         self.report({'INFO'}, msg)
+        
+        # Log activity
+        from ..utils.activity_logger import log_activity
+        details = f"Restored: {restored}"
+        if deleted_converted > 0:
+            details += f" | Deleted: {deleted_converted}"
+        if skipped_external > 0:
+            details += f" | External: {skipped_external}"
+        if skipped_packed > 0:
+            details += f" | Packed: {skipped_packed}"
+        if failed > 0:
+            details += f" | Failed: {failed}"
+        
+        log_activity("RESTORE_FORMAT", details, context)
+        
         return {'FINISHED'}
 
     def _update_image_datablock(self, restored_path, converted_files, blend_dir):

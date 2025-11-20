@@ -80,7 +80,88 @@ def detect_published_file_status(context):
             if source:
                 return True, source
     
+    # METHOD 4: Search upward for .publish_activity.log (for nested publish structures)
+    # Check up to 5 levels up
+    current_search_dir = current_dir
+    for _ in range(5):
+        parent = os.path.dirname(current_search_dir)
+        if parent == current_search_dir:  # Reached root
+            break
+        
+        log_file = os.path.join(parent, ".publish_activity.log")
+        if os.path.exists(log_file):
+            # Check if this file path is in the log
+            source = parse_log_for_file(log_file, current_file)
+            if source:
+                return True, source
+        
+        current_search_dir = parent
+    
     # Not a published file
+    return False, ""
+
+
+def detect_library_published_status(library_path):
+    """
+    Detect if a linked library is a published file.
+    
+    Args:
+        library_path: str - Absolute path to library .blend file
+        
+    Returns:
+        tuple: (is_published: bool, source_path: str)
+    """
+    if not library_path or not os.path.exists(library_path):
+        return False, ""
+    
+    library_path = os.path.normpath(library_path)
+    library_dir = os.path.dirname(library_path)
+    library_filename = os.path.basename(library_path)
+    
+    # METHOD 1: Check FILE pattern (NEW - file-based versioning)
+    if re.match(r'.+_v\d{3}\.blend$', library_filename, re.IGNORECASE):
+        # Check log in current directory
+        log_file = os.path.join(library_dir, ".publish_activity.log")
+        if os.path.exists(log_file):
+            source = parse_log_for_file(log_file, library_path)
+            if source:
+                return True, source
+        
+        # Check log in parent directory
+        parent = os.path.dirname(library_dir)
+        log_file = os.path.join(parent, ".publish_activity.log")
+        if os.path.exists(log_file):
+            source = parse_log_for_file(log_file, library_path)
+            if source:
+                return True, source
+    
+    # METHOD 2: Check FOLDER pattern (OLD - folder-based versioning)
+    folder_name = os.path.basename(library_dir)
+    if re.match(r'.+_v\d{3}$', folder_name):
+        parent = os.path.dirname(library_dir)
+        log_file = os.path.join(parent, ".publish_activity.log")
+        if os.path.exists(log_file):
+            source = parse_log_for_path(log_file, library_dir)
+            if source:
+                return True, source
+    
+    # METHOD 3: Search upward for .publish_activity.log (for libraries in subfolders)
+    # Check up to 5 levels up
+    current_search_dir = library_dir
+    for _ in range(5):
+        parent = os.path.dirname(current_search_dir)
+        if parent == current_search_dir:  # Reached root
+            break
+        
+        log_file = os.path.join(parent, ".publish_activity.log")
+        if os.path.exists(log_file):
+            # Check if this library path is in the log
+            source = parse_log_for_file(log_file, library_path)
+            if source:
+                return True, source
+        
+        current_search_dir = parent
+    
     return False, ""
 
 
@@ -137,13 +218,11 @@ def parse_log_for_path(log_file, target_path):
 
 def parse_log_for_file(log_file, target_file):
     """
-    Parse publish activity log (NEW format) and return source path if target found.
+    Parse publish activity log and return source path if target found.
     
-    NEW Format:
-    [timestamp] PUBLISH | Asset: name | Version: versioned_path | Latest: latest_path | Source: source | ...
-      └─ LINKED | Library: name | Path: path
-    
-    Checks both Version and Latest paths.
+    Log Format:
+    [timestamp] PUBLISH | Asset: name | Path: published_path | Source: source | ...
+      └─ LINKED | Library: name | Path: path | Source: source
     
     Args:
         log_file: Path to .publish_activity.log
@@ -157,39 +236,23 @@ def parse_log_for_file(log_file, target_file):
     try:
         with open(log_file, 'r', encoding='utf-8') as f:
             for line in f:
-                # Skip LINKED entries
-                if line.strip().startswith('└─ LINKED'):
-                    continue
-                
-                # Check main PUBLISH entries
-                if 'PUBLISH |' in line:
-                    # Check Version path
-                    version_match = re.search(r'Version: ([^|]+)', line)
-                    if version_match:
-                        logged_path = os.path.normpath(version_match.group(1).strip())
-                        if logged_path == target_file:
-                            source_match = re.search(r'Source: ([^|]+)', line)
-                            if source_match:
-                                return source_match.group(1).strip()
-                    
-                    # Check Latest path
-                    latest_match = re.search(r'Latest: ([^|]+)', line)
-                    if latest_match:
-                        logged_path = os.path.normpath(latest_match.group(1).strip())
-                        if logged_path == target_file:
-                            source_match = re.search(r'Source: ([^|]+)', line)
-                            if source_match:
-                                return source_match.group(1).strip()
-                
-                # Check LINKED library entries (for libraries published with main file)
-                if '└─ LINKED |' in line:
-                    path_match = re.search(r'Path: (.+)$', line)
+                if 'PUBLISH |' in line and 'Path:' in line:
+                    path_match = re.search(r'Path: ([^|]+)', line)
                     if path_match:
                         logged_path = os.path.normpath(path_match.group(1).strip())
                         if logged_path == target_file:
-                            # Library is published - it's a published file
-                            # Source is the library itself (libraries always overwrite)
-                            return "LINKED_LIBRARY"
+                            source_match = re.search(r'Source: ([^|]+)', line)
+                            if source_match:
+                                return source_match.group(1).strip()
+                
+                if '└─ LINKED |' in line:
+                    path_match = re.search(r'Path: ([^|]+)', line)
+                    if path_match:
+                        logged_path = os.path.normpath(path_match.group(1).strip())
+                        if logged_path == target_file:
+                            source_match = re.search(r'\|\s*Source:\s*(.+?)(?:\s*\n|$)', line)
+                            if source_match:
+                                return source_match.group(1).strip()
     except Exception as e:
         print(f"Error parsing log: {e}")
     

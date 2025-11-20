@@ -164,6 +164,17 @@ class TEXTURE_OT_CleanupUnusedTextures(bpy.types.Operator):
             self.report({'WARNING'}, msg)
         else:
             self.report({'WARNING'}, "No textures were processed")
+        
+        # Log activity
+        from ..utils.activity_logger import log_activity
+        action = "Delete" if self.action == 'DELETE_PERMANENTLY' else "Move to Trash"
+        details = f"Action: {action} | Cleaned: {processed}"
+        if skipped > 0:
+            details += f" | Skipped: {skipped}"
+        if failed > 0:
+            details += f" | Failed: {failed}"
+        
+        log_activity("CLEANUP_UNUSED_TEXTURES", details, context)
 
         return {'FINISHED'}
 

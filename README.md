@@ -9,10 +9,10 @@
 [![Blender](https://img.shields.io/badge/Blender-4.0+-orange?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-green)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.5.0-brightgreen)](https://github.com/alfajririzqi/asset_management/releases)
+[![Version](https://img.shields.io/badge/Version-1.2.0-brightgreen)](https://github.com/alfajririzqi/asset_management/releases)
 [![Free](https://img.shields.io/badge/💎-100%25_FREE-success)](https://github.com/alfajririzqi/asset_management)
 
-[✨ Features](#-features) • [📥 Installation](#-installation) • [🚀 Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [💬 Support](#-support)
+[✨ Features](#-features) • [📥 Installation](#-installation) • [🚀 Quick Start](#-quick-start) • [💬 Support](#-support)
 
 ---
 
@@ -137,31 +137,31 @@ Stop wasting time on manual asset publishing and texture cleanup. This addon aut
 - Centralized logging (`.publish_activity.log`)
 - Linked library support (optional)
 
-**Linked Libraries (NEW in v1.5):**
-- ✨ Auto-validation on checkbox toggle (no separate scan button)
-- ✨ Reload library button for live updates
+**Linked Libraries:**
 - Include/exclude in publish
-- Validate library paths with structure preview
-- Deep copy library assets with folder mirroring
-- Texture consolidation for libraries
+- Scan & validate library paths
+- Deep copy library assets with textures
+- Structure mirroring (preserves folder hierarchy)
 - External library detection (different drives)
-- Smart path normalization (relative/absolute)
 - ⚠️ **Limitation:** Only supports 1 level of nesting (link-in-link not supported)
 
 ---
 
-### 🛡️ Work Safely - Published File Protection
+### 🛡️ Work Safely - Published File Protection (NEW in v1.2.0)
 
-**3-Layer Detection System:**
-1. **Folder Pattern**: Detects `AssetName_v###` naming
-2. **Log Parsing**: Checks `.publish_activity.log`
-3. **Parent Fallback**: Scans parent directories
+**4-Layer Auto-Detection System:**
+1. **File Pattern**: Detects `AssetName_v###.blend` naming
+2. **Folder Pattern**: Detects `AssetName_v###/` directories
+3. **Log Parsing**: Checks `.publish_activity.log` in publish path
+4. **Recursive Search**: Scans up to 5 parent directories for logs
 
 **Protection Features:**
+- 🚀 **Auto-detection on file open** (no manual validation needed)
 - ⛔ Blocks all operations on published files
 - 🚫 Prevents recursive versioning (v001_v001)
-- 📍 Shows source file path
-- 🔒 Automatic detection on file open
+- 📍 **Clickable source path** (copies to clipboard)
+- 🔗 **Published library detection** (validates linked files)
+- 🔒 Inline warnings in all 5 panels
 - ⚡ Performance-optimized caching
 
 **Disabled Operations When Published File Detected:**
@@ -375,13 +375,8 @@ asset_management/
 ├── 📁 utils/                           # Shared utilities
 │   └── published_file_detector.py     # Multi-layer detection
 │
-├── 📁 docs/                            # Documentation
-│   ├── architecture/                  # System design
-│   ├── development/                   # Implementation notes
-│   └── guides/                        # User tutorials
-│
 └── 📁 .github/
-    └── copilot-instructions.md        # Architecture guide
+    └── copilot-instructions.md        # Architecture guide for developers
 ```
 
 **Design Principles:**
@@ -401,17 +396,7 @@ asset_management/
 | Resource | Description |
 |----------|-------------|
 | **[CHANGELOG.md](CHANGELOG.md)** | Version history and updates |
-| **[docs/](docs/)** | Comprehensive documentation |
-
-
-
-### For Users
-- 📖 [Testing Checklist](docs/guides/TESTING_CHECKLIST.md)
-- 🛡️ [Transform Safety Guide](docs/guides/TRANSFORM_SAFETY_IMPLEMENTATION.md)
-
-### For Developers
-- 🏗️ [Publish System Design](docs/architecture/PUBLISH_SYSTEM_V2.md)
-- 🔧 [Implementation Summary](docs/development/IMPLEMENTATION_SUMMARY.md)
+| **[.github/copilot-instructions.md](.github/copilot-instructions.md)** | Architecture guide for developers |
 
 ---
 
@@ -483,7 +468,8 @@ Please include:
 ### Development
 
 For architecture details and coding guidelines, see:
-- **[docs/](docs/)** - Technical documentation
+- **[.github/copilot-instructions.md](.github/copilot-instructions.md)** - Architecture guide
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history
 
 ---
 
@@ -526,18 +512,19 @@ This addon is **100% free** and always will be. If you'd like to support develop
 
 ## 🗺️ Roadmap
 
-### v1.5 (Current) ✅
+### v1.2.0 (Current) ✅
 - ✅ Complete publishing system with validation
 - ✅ Texture optimization & consolidation tools
 - ✅ Automatic version control
-- ✅ Published file protection (3-layer detection)
+- ✅ **NEW:** Auto-detection on file open (no validation needed)
+- ✅ **NEW:** 4-layer published file detection (file/folder/log/recursive)
+- ✅ **NEW:** Published library detection (validates linked files)
+- ✅ **NEW:** Clickable source paths (copy to clipboard)
+- ✅ **NEW:** Inline warnings in all 5 panels
 - ✅ High-poly & transform analysis
 - ✅ Material & asset optimization
 - ✅ Batch rename with patterns
-- ✅ **NEW:** Auto-validation for linked libraries
-- ✅ **NEW:** Reload library button with path normalization
-- ✅ **NEW:** Improved publish dialog UI (table layouts)
-- ✅ **NEW:** Smart library structure mirroring
+- ✅ Linked library support with structure mirroring
 
 **Status:** Production-ready, 100% FREE forever
 
@@ -657,7 +644,67 @@ Time Saved: 45-90 minutes per multi-format delivery
 
 ---
 
-**4. Batch Cleanup Operations** ⭐⭐⭐⭐⭐
+**4. Nested Linked Libraries Support** ⭐⭐⭐⭐
+
+**What it does:**
+- Support for multi-level library dependencies (link-in-link)
+- Automatic dependency tree resolution
+- Recursive library scanning (unlimited depth)
+- Smart publish order (dependencies first)
+- Prevent circular dependency errors
+
+**Current Limitation in v1.2.0 FREE:**
+```
+❌ Only 1 level supported:
+   Master.blend → Library.blend ✅
+   Master.blend → Library.blend → SubLibrary.blend ❌
+```
+
+**v2.0 PRO Solution:**
+```
+✅ Unlimited nesting:
+   Master.blend
+   └─ Character.blend
+      └─ Body.blend
+         └─ Head.blend (all published automatically!)
+
+Auto-detects dependency chain:
+1. Publish Head.blend first
+2. Publish Body.blend (relink to published Head)
+3. Publish Character.blend (relink to published Body)
+4. Publish Master.blend (relink to published Character)
+```
+
+**Use Case:**
+```
+Scenario: Complex character rig with nested libraries
+
+Structure:
+• chr_hero.blend (master)
+  ├─ chr_hero_body.blend (body mesh)
+  │  └─ chr_hero_head.blend (head detail)
+  └─ chr_hero_rig.blend (armature)
+     └─ chr_hero_controls.blend (rig controls)
+
+v1.2.0 FREE:
+• ERROR: "Nested libraries not supported"
+• Must manually flatten structure first
+• Time: 1-2 hours restructuring ⏰
+
+v2.0 PRO:
+• Check "Include Linked Libraries"
+• Addon auto-detects 5 files in dependency chain
+• Click "Publish" → All 5 files published in correct order
+• All internal paths relinked automatically
+• Time: 2 minutes 🚀
+
+Time Saved: 1-2 hours per complex asset
+Reliability: 100% (no manual relink errors)
+```
+
+---
+
+**5. Batch Cleanup Operations** ⭐⭐⭐⭐⭐
 
 **What it does:**
 - Run cleanup operations on multiple files simultaneously
@@ -702,21 +749,22 @@ Client Delivery: Cleaner, more professional
 - Batch Publishing: 2-3 hours
 - Batch Downgrade: 30-60 minutes
 - Batch Convert: 45-90 minutes
+- Nested Libraries: 1-2 hours
 - Batch Cleanup: 1-2 hours
 
-**Total: 4-7 hours saved per project** ⏰
+**Total: 5-9 hours saved per project** ⏰
 
 **ROI Calculation:**
 ```
 Freelancer Rate:        $30/hour
-Time Saved:             4-7 hours per project
-Value Per Project:      $120-210
+Time Saved:             5-9 hours per project
+Value Per Project:      $150-270
 
 Pro Version Cost:       $19 one-time
-Break-even:             First project pays 6-11x! 🎉
+Break-even:             First project pays 8-14x! 🎉
 
 Annual Savings (10 projects/year):
-$1,200 - $2,100 in time saved
+$1,500 - $2,700 in time saved
 ```
 
 ---
@@ -763,10 +811,10 @@ Made by [Rizqi Alfajri](https://github.com/alfajririzqi) for Blender Artists Wor
 
 ⭐ **Star this repo** if it helps your workflow!
 
-[Report Bug](../../issues) • [Request Feature](../../issues) • [Documentation](docs/)
+[Report Bug](../../issues) • [Request Feature](../../issues) • [Discussions](../../discussions)
 
 ---
 
-**Version 1.5.0** • Last Updated: November 17, 2025 • Blender 4.0+
+**Version 1.2.0** • Last Updated: November 20, 2025 • Blender 4.0+
 
 </div>

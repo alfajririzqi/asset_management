@@ -40,10 +40,18 @@ class TEXTURE_OT_ConvertImageFormat(bpy.types.Operator):
             layout.label(text="Backups saved as: filename.png.fmt", icon='INFO')
         layout.separator()
         layout.label(text="Original files will be overwritten!", icon='ERROR')
+        layout.separator()
+        layout.label(text="Note: External & packed textures will be skipped", icon='INFO')
 
     def execute(self, context):
+        from ..utils.texture_detector import detect_external_and_packed_textures
+        
+        external_imgs, packed_imgs, local_imgs = detect_external_and_packed_textures(context)
+        
         converted = 0
         skipped = 0
+        skipped_external = 0
+        skipped_packed = 0
         blend_dir = os.path.dirname(bpy.data.filepath)
 
         if not blend_dir:
@@ -57,6 +65,16 @@ class TEXTURE_OT_ConvertImageFormat(bpy.types.Operator):
                 continue
             if img.source != 'FILE':
                 skipped += 1
+                continue
+            
+            # Skip external textures
+            if img.name in external_imgs:
+                skipped_external += 1
+                continue
+            
+            # Skip packed textures
+            if img.name in packed_imgs:
+                skipped_packed += 1
                 continue
 
             original_abs_path = bpy.path.abspath(img.filepath)
@@ -130,10 +148,29 @@ class TEXTURE_OT_ConvertImageFormat(bpy.types.Operator):
                 self.report({'ERROR'}, f"Failed to convert {img.name}: {str(e)}")
                 skipped += 1
 
+        msg = f"Converted: {converted}"
+        if skipped > 0:
+            msg += f" | Skipped: {skipped}"
+        if skipped_external > 0:
+            msg += f" | External: {skipped_external}"
+        if skipped_packed > 0:
+            msg += f" | Packed: {skipped_packed}"
+        
         if converted > 0:
-            self.report({'INFO'}, f"Conversion complete: Converted {converted} • Skipped {skipped}")
+            self.report({'INFO'}, msg)
         else:
-            self.report({'WARNING'}, f"No images converted • Skipped {skipped}")
+            self.report({'WARNING'}, msg)
+        
+        # Log activity
+        from ..utils.activity_logger import log_activity
+        format_name = "PNG" if self.target_format == 'PNG' else "JPEG"
+        details = f"Format: {format_name} | Converted: {converted}"
+        if skipped_external > 0:
+            details += f" | External: {skipped_external}"
+        if skipped_packed > 0:
+            details += f" | Packed: {skipped_packed}"
+        
+        log_activity("CONVERT_FORMAT", details, context)
 
         return {'FINISHED'}
 

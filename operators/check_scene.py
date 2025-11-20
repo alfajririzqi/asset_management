@@ -721,10 +721,11 @@ class SCENE_OT_ShowAnalysisResult(bpy.types.Operator):
     """Show scene analysis result dialog"""
     bl_idname = "scene.show_analysis_result"
     bl_label = "Scene Analysis Complete"
+    bl_description = "Display scene analysis report with material, texture, and usage statistics"
     bl_options = {'REGISTER', 'INTERNAL'}
     
     def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self, width=600)
+        return context.window_manager.invoke_props_dialog(self, width=500)
     
     def execute(self, context):
         return {'FINISHED'}

@@ -4,10 +4,20 @@ import shutil
 
 
 class ASSET_OT_ConsolidateTextures(bpy.types.Operator):
-    """Move external textures into the local 'textures' folder and retarget image paths."""
+    """Move or copy external textures into the local 'textures' folder and retarget image paths."""
     bl_idname = "asset.consolidate_textures"
     bl_label = "Consolidate Textures"
-    bl_description = "Move external textures to the local 'textures' folder and repath them"
+    bl_description = "Move or copy external textures to the local 'textures' folder and repath them"
+
+    operation_mode: bpy.props.EnumProperty(
+        name="Operation",
+        description="Choose to move or copy texture files",
+        items=[
+            ('MOVE', 'Move Files', 'Move texture files to textures folder (original files will be deleted)', 'FORWARD', 0),
+            ('COPY', 'Copy Files', 'Copy texture files to textures folder (keep original files)', 'DUPLICATE', 1),
+        ],
+        default='COPY'
+    )
 
     textures_to_move = []
     packed_textures = []
@@ -62,7 +72,7 @@ class ASSET_OT_ConsolidateTextures(bpy.types.Operator):
             })
 
         if self.textures_to_move or self.packed_textures or self.missing_textures:
-            return context.window_manager.invoke_props_dialog(self, width=500)
+            return context.window_manager.invoke_props_dialog(self)
 
         self.report({'INFO'}, "All textures are already in the local 'textures' folder.")
         return {'CANCELLED'}
@@ -70,7 +80,11 @@ class ASSET_OT_ConsolidateTextures(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
         
-        # Missing textures warning
+        layout.label(text="Operation Mode:", icon='SETTINGS')
+        layout.prop(self, "operation_mode", expand=True)
+        
+        layout.separator()
+        
         if self.missing_textures:
             box = layout.box()
             box.alert = True
@@ -115,14 +129,20 @@ class ASSET_OT_ConsolidateTextures(bpy.types.Operator):
                 layout.label(text=f"... and {len(self.textures_to_move) - 3} more.", icon='BLANK1')
 
             layout.separator()
-            layout.label(text="⚠️ This will move files on your disk.", icon='ERROR')
-            layout.label(text="The operation cannot be undone.", icon='ERROR')
+            if self.operation_mode == 'MOVE':
+                layout.label(text="⚠️ This will MOVE files on your disk.", icon='ERROR')
+                layout.label(text="Original files will be deleted!", icon='ERROR')
+            else:
+                layout.label(text="ℹ️ This will COPY files to textures folder.", icon='INFO')
+                layout.label(text="Original files will be kept.", icon='CHECKMARK')
         else:
             layout.label(text="No textures to consolidate.", icon='INFO')
             if not self.missing_textures:
                 layout.label(text="All textures are already in ./textures", icon='CHECKMARK')
 
     def execute(self, context):
+        from ..utils.activity_logger import log_activity
+        
         if not self.textures_to_move:
             self.report({'INFO'}, "No textures to consolidate.")
             return {'CANCELLED'}
@@ -145,7 +165,10 @@ class ASSET_OT_ConsolidateTextures(bpy.types.Operator):
                     skipped_count += 1
                     continue
 
-                shutil.move(source_path, dest_path)
+                if self.operation_mode == 'MOVE':
+                    shutil.move(source_path, dest_path)
+                else:
+                    shutil.copy2(source_path, dest_path)
                 
                 img.filepath_raw = dest_path
                 img.filepath = bpy.path.relpath(dest_path, start=blend_dir)
@@ -162,7 +185,8 @@ class ASSET_OT_ConsolidateTextures(bpy.types.Operator):
                 self.report({'ERROR'}, f"Failed to move {filename}: {e}")
 
         # Build result message
-        msg = f"✅ Moved: {moved_count}"
+        operation_text = "Moved" if self.operation_mode == 'MOVE' else "Copied"
+        msg = f"✅ {operation_text}: {moved_count}"
         if skipped_count > 0:
             msg += f" • Skipped: {skipped_count} (already exists)"
         if error_count > 0:

@@ -1,5 +1,4 @@
 import bpy
-import math
 
 class ASSET_OT_check_highpoly(bpy.types.Operator):
     """Highlight objects exceeding polygon threshold."""
@@ -8,10 +7,9 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
     bl_description = "Highlight objects exceeding polygon threshold"
     bl_options = {'REGISTER'}
 
-    BACKGROUND_COLOR = (0.302, 0.282, 0.157) 
+    BACKGROUND_COLOR = (0.302, 0.282, 0.157)
 
     def get_tris_count(self, obj, use_modifiers=True):
-        """Return triangle count for the given object."""
         if obj.type != 'MESH':
             return 0
 
@@ -31,54 +29,29 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
         if hasattr(context.scene, "transform_mode_active") and context.scene.transform_mode_active:
             bpy.ops.asset.exit_transform()
         
+        if not context.scene.highpoly_mode_active:
+            for area in context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for space in area.spaces:
+                        if space.type == 'VIEW_3D':
+                            context.scene.highpoly_original_shading_type = space.shading.type
+                            context.scene.highpoly_original_color_type = space.shading.color_type
+                            context.scene.highpoly_original_bg = space.shading.background_color[:3]
+                            context.scene.highpoly_original_type = space.shading.background_type
+                            break
+                    break
+        
         for area in context.screen.areas:
             if area.type == 'VIEW_3D':
                 for space in area.spaces:
                     if space.type == 'VIEW_3D':
                         if space.shading.type != 'SOLID':
                             space.shading.type = 'SOLID'
+                        space.shading.background_type = 'VIEWPORT'
+                        space.shading.background_color = self.BACKGROUND_COLOR
+                        break
+                break
         
-        high_poly_count = 0
-
-        for area in context.screen.areas:
-            if area.type != 'VIEW_3D':
-                continue
-            for space in area.spaces:
-                if space.type != 'VIEW_3D':
-                    continue
-                if not hasattr(context.scene, "highpoly_original_bg"):
-                    context.scene.highpoly_original_bg = space.shading.background_color[:3]
-                if not hasattr(context.scene, "highpoly_original_type"):
-                    context.scene.highpoly_original_type = space.shading.background_type
-                if not hasattr(context.scene, "highpoly_original_color_type"):
-                    context.scene.highpoly_original_color_type = space.shading.color_type
-
-        for area in context.screen.areas:
-            if area.type != 'VIEW_3D':
-                continue
-            for space in area.spaces:
-                if space.type != 'VIEW_3D':
-                    continue
-                if not hasattr(context.scene, "highpoly_original_bg"):
-                    context.scene.highpoly_original_bg = space.shading.background_color[:3]
-                if not hasattr(context.scene, "highpoly_original_type"):
-                    context.scene.highpoly_original_type = space.shading.background_type
-
-        for area in context.screen.areas:
-            if area.type != 'VIEW_3D':
-                continue
-            for space in area.spaces:
-                if space.type != 'VIEW_3D':
-                    continue
-                space.shading.background_type = 'VIEWPORT'
-                space.shading.background_color = self.BACKGROUND_COLOR
-
-        context.area.tag_redraw()
-        for window in context.window_manager.windows:
-            for area in window.screen.areas:
-                if area.type == 'VIEW_3D':
-                    area.tag_redraw()
-
         for obj in context.scene.objects:
             if obj.type != 'MESH':
                 continue
@@ -89,9 +62,9 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
                 del obj["_tris_count"]
 
         objects_to_check = [obj for obj in context.view_layer.objects if obj.type == 'MESH']
-        
         hidden_count = len([obj for obj in context.scene.objects if obj.type == 'MESH']) - len(objects_to_check)
 
+        high_poly_count = 0
         for obj in objects_to_check:
             tris = self.get_tris_count(obj, context.scene.highpoly_use_modifiers)
             if tris > context.scene.highpoly_threshold:
@@ -101,15 +74,20 @@ class ASSET_OT_check_highpoly(bpy.types.Operator):
                 high_poly_count += 1
 
         for area in context.screen.areas:
-            if area.type != 'VIEW_3D':
-                continue
-            for space in area.spaces:
-                if space.type != 'VIEW_3D':
-                    continue
-                space.shading.color_type = 'OBJECT'
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        space.shading.color_type = 'OBJECT'
+                        break
+                break
+
+        context.area.tag_redraw()
+        for window in context.window_manager.windows:
+            for area in window.screen.areas:
+                if area.type == 'VIEW_3D':
+                    area.tag_redraw()
 
         context.scene.highpoly_mode_active = True
-        
         context.scene.highpoly_hidden_skipped = hidden_count
 
         self.report(
@@ -140,12 +118,12 @@ class ASSET_OT_select_highpoly(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        selected_count = 0
-        unhidden_count = 0
-        
         bpy.ops.object.select_all(action='DESELECT')
         
+        selected_count = 0
+        unhidden_count = 0
         view_layer_objects = context.view_layer.objects
+        
         for obj in context.scene.objects:
             if obj.type == 'MESH' and "_high_poly" in obj:
                 if obj.name in view_layer_objects:
@@ -161,10 +139,10 @@ class ASSET_OT_select_highpoly(bpy.types.Operator):
                         print(f"Warning: Could not select {obj.name}: {e}")
         
         if selected_count > 0:
+            msg = f"Selected {selected_count} high-poly objects"
             if unhidden_count > 0:
-                self.report({'INFO'}, f"Selected {selected_count} high-poly objects (unhid {unhidden_count} hidden)")
-            else:
-                self.report({'INFO'}, f"Selected {selected_count} high-poly objects")
+                msg += f" (unhid {unhidden_count} hidden)"
+            self.report({'INFO'}, msg)
         else:
             self.report({'WARNING'}, "No high-poly objects found. Run analysis first.")
         
@@ -179,17 +157,14 @@ class ASSET_OT_isolate_highpoly(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        # Check if already isolated
         is_isolated = getattr(context.scene, 'highpoly_isolated', False)
         
         if is_isolated:
-            # UN-ISOLATE: Show all hidden objects
             unhidden_count = 0
             for obj in context.view_layer.objects:
                 if obj.type != 'MESH':
                     continue
                 
-                # Check if object was hidden by isolation (custom property)
                 if "_isolated_by_highpoly" in obj:
                     obj.hide_set(False)
                     del obj["_isolated_by_highpoly"]
@@ -198,16 +173,14 @@ class ASSET_OT_isolate_highpoly(bpy.types.Operator):
             context.scene.highpoly_isolated = False
             self.report({'INFO'}, f"Un-isolated: showed {unhidden_count} objects")
         else:
-            # ISOLATE: Hide non-high-poly objects
             hidden_count = 0
             for obj in context.view_layer.objects:
                 if obj.type != 'MESH':
                     continue
                 
-                # Hide non-high-poly objects and mark them
                 if "_high_poly" not in obj:
                     obj.hide_set(True)
-                    obj["_isolated_by_highpoly"] = True  
+                    obj["_isolated_by_highpoly"] = True
                     hidden_count += 1
             
             context.scene.highpoly_isolated = True
@@ -232,32 +205,33 @@ class ASSET_OT_exit_highpoly(bpy.types.Operator):
                 del obj["_high_poly"]
             if "_tris_count" in obj:
                 del obj["_tris_count"]
-            # Clear isolation markers
             if "_isolated_by_highpoly" in obj:
                 obj.hide_set(False)
                 del obj["_isolated_by_highpoly"]
 
         for area in context.screen.areas:
-            if area.type != 'VIEW_3D':
-                continue
-            for space in area.spaces:
-                if space.type != 'VIEW_3D':
-                    continue
-                if hasattr(context.scene, "highpoly_original_type"):
-                    space.shading.background_type = context.scene.highpoly_original_type
-                else:
-                    space.shading.background_type = 'THEME'
-                
-                if hasattr(context.scene, "highpoly_original_bg"):
-                    space.shading.background_color = context.scene.highpoly_original_bg
-                else:
-                    space.shading.background_color = (0.0, 0.0, 0.0)
-                
-                # Restore original color type
-                if hasattr(context.scene, "highpoly_original_color_type"):
-                    space.shading.color_type = context.scene.highpoly_original_color_type
-                else:
-                    space.shading.color_type = 'MATERIAL'
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        if hasattr(context.scene, "highpoly_original_shading_type"):
+                            space.shading.type = context.scene.highpoly_original_shading_type
+                        
+                        if hasattr(context.scene, "highpoly_original_type"):
+                            space.shading.background_type = context.scene.highpoly_original_type
+                        else:
+                            space.shading.background_type = 'THEME'
+                        
+                        if hasattr(context.scene, "highpoly_original_bg"):
+                            space.shading.background_color = context.scene.highpoly_original_bg
+                        else:
+                            space.shading.background_color = (0.0, 0.0, 0.0)
+                        
+                        if hasattr(context.scene, "highpoly_original_color_type"):
+                            space.shading.color_type = context.scene.highpoly_original_color_type
+                        else:
+                            space.shading.color_type = 'MATERIAL'
+                        break
+                break
 
         context.area.tag_redraw()
         for window in context.window_manager.windows:
@@ -266,7 +240,7 @@ class ASSET_OT_exit_highpoly(bpy.types.Operator):
                     area.tag_redraw()
 
         context.scene.highpoly_mode_active = False
-        context.scene.highpoly_isolated = False  # Reset isolation state
+        context.scene.highpoly_isolated = False
 
         self.report({'INFO'}, "Exited high-poly analysis mode")
         return {'FINISHED'}
@@ -318,6 +292,12 @@ def register():
         name="Original Color Type",
         description="Stored viewport color type for restoration",
         default='MATERIAL',
+    )
+    
+    bpy.types.Scene.highpoly_original_shading_type = bpy.props.StringProperty(
+        name="Original Shading Type",
+        description="Stored viewport shading type (SOLID/MATERIAL/RENDERED) for restoration",
+        default='SOLID',
     )
 
     bpy.utils.register_class(ASSET_OT_check_highpoly)

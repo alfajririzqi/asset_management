@@ -26,10 +26,8 @@ class TEXTURE_PT_BatchRenamePanel(bpy.types.Panel):
         layout = self.layout
         props = context.scene.texture_batch_renamer
         
-        # Auto-detect published file
         is_published, source_path = detect_published_file_status(context)
         
-        # Published file warning (inline)
         if is_published:
             warning_row = layout.row()
             warning_row.alert = True
@@ -37,10 +35,12 @@ class TEXTURE_PT_BatchRenamePanel(bpy.types.Panel):
             warning_col.scale_y = 0.8
             warning_col.label(text="🚫 Published file - Operations disabled", icon='ERROR')
             if source_path:
-                warning_col.label(text=f"Source: {source_path}", icon='BLANK1')
+                row = warning_col.row()
+                row.scale_y = 1.2
+                op = row.operator("asset.copy_source_path", text=f"Source: {source_path}", icon='COPYDOWN', emboss=False)
+                op.source_path = source_path
             layout.separator()
         
-        # Batch Rename Tools section
         box = layout.box()
         box.label(text="Batch Rename Tools", icon='SORTALPHA')
         

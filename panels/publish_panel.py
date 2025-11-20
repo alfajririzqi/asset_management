@@ -15,7 +15,22 @@ class ASSET_PT_Publish(bpy.types.Panel):
         layout = self.layout
         scene = context.scene
 
-        # Pre-Publish Check Button
+        # Check if published file (auto-detected on file load)
+        if scene.publish_is_published_file:
+            warning_box = layout.box()
+            warning_box.alert = True
+            warning_box.label(text="🚫 PUBLISHED FILE DETECTED", icon='ERROR')
+            col = warning_box.column(align=True)
+            if scene.publish_source_path:
+                # Clickable operator to copy source path (larger scale)
+                row = col.row()
+                row.scale_y = 1.2
+                op = row.operator("asset.copy_source_path", text=f"Source: {scene.publish_source_path}", icon='COPYDOWN', emboss=False)
+                op.source_path = scene.publish_source_path
+            col.scale_y = 0.8
+            col.label(text="Cannot publish from publish directory!", icon='BLANK1')
+            col.label(text="This prevents recursive versioning (v001_v001)", icon='BLANK1')
+        
         box = layout.box()
         box.label(text="Validation:", icon='CHECKMARK')
         
@@ -23,31 +38,17 @@ class ASSET_PT_Publish(bpy.types.Panel):
         row.scale_y = 1.3
         row.operator("asset.check_publish", text="Run Pre-Publish Checks", icon='VIEWZOOM')
         
-        if not bpy.data.filepath:
+        # Disable if: 1) File not saved, OR 2) Published file detected
+        if not bpy.data.filepath or scene.publish_is_published_file:
             row.enabled = False
         
-        # Show validation results if check has been run
         if scene.publish_check_done:
-            
-            # Published File Warning (if detected)
-            if scene.publish_is_published_file:
-                warning_box = layout.box()
-                warning_box.alert = True
-                warning_box.label(text="🚫 PUBLISHED FILE DETECTED", icon='ERROR')
-                col = warning_box.column(align=True)
-                col.scale_y = 0.8
-                if scene.publish_source_path:
-                    col.label(text=f"Source: {scene.publish_source_path}", icon='BLANK1')
-                col.label(text="Cannot publish from publish directory!", icon='BLANK1')
-                col.label(text="This prevents recursive versioning (v001_v001)", icon='BLANK1')
                 
             
-            # Validation Results
             result_box = layout.box()
             result_box.label(text="Validation Results:", icon='PRESET_NEW')
             col = result_box.column(align=True)
             
-            # Textures folder
             if scene.publish_textures_exist:
                 col.label(text=f"Textures folder: {scene.publish_texture_count} files", icon='CHECKMARK')
             else:
@@ -151,7 +152,11 @@ class ASSET_PT_Publish(bpy.types.Panel):
             # Force Publish option (if has warnings)
             if scene.publish_has_warnings:
                 force_box = layout.box()
-                force_box.prop(scene, "publish_force", text="Force Publish (ignore warnings)", icon='ERROR')
+                force_row = force_box.row()
+                force_row.prop(scene, "publish_force", text="Force Publish (ignore warnings)", icon='ERROR')
+                # Disable if published file
+                if scene.publish_is_published_file:
+                    force_row.enabled = False
                 
                 if scene.publish_force:
                     info_col = force_box.column(align=True)
@@ -220,19 +225,18 @@ class ASSET_PT_Publish(bpy.types.Panel):
                     lib_list_box.label(text="Library Selection:", icon='OUTLINER')
                     
                     for item in scene.publish_library_selection:
-                        # Main row for checkbox and name
                         row = lib_list_box.row(align=True)
                         
-                        # Checkbox
-                        checkbox_col = row.column()
-                        checkbox_col.prop(item, "selected", text="")
-                        # Disable checkbox if published file
-                        if scene.publish_is_published_file:
-                            checkbox_col.enabled = False
-                        
-                        # Library name with status icon
                         has_error = "ERROR" in item.status
                         has_warning = "WARNING" in item.status
+                        
+                        if has_error or has_warning:
+                            row.alert = True
+                        
+                        checkbox_col = row.column()
+                        checkbox_col.prop(item, "selected", text="")
+                        if scene.publish_is_published_file:
+                            checkbox_col.enabled = False
                         
                         if has_error:
                             status_icon = 'ERROR'
@@ -241,18 +245,12 @@ class ASSET_PT_Publish(bpy.types.Panel):
                         else:
                             status_icon = 'CHECKMARK'
                         
-                        # Show folder name with structure info
                         if item.structure and item.structure != "_external":
                             label_text = f"{item.folder_name} ({item.structure})"
                         else:
                             label_text = f"{item.folder_name}"
                         
-                        # Create a dummy operator for tooltip (shows full path on hover)
                         name_col = row.column()
-                        if has_error or has_warning:
-                            name_col.alert = True
-                        
-                        # Use operator button (emboss=False) to show tooltip with full path
                         op = name_col.operator("asset.copy_library_path", text=label_text, icon=status_icon, emboss=False)
                         op.library_path = item.filepath
                         op.library_name = item.folder_name
@@ -321,16 +319,23 @@ class ASSET_PT_Publish(bpy.types.Panel):
         # Publish path browse
         col = publish_box.column(align=True)
         col.label(text="Publish Path:", icon='FILE_FOLDER')
-        col.prop(scene, "publish_path", text="")
+        path_row = col.row()
+        path_row.prop(scene, "publish_path", text="")
+        # Disable if published file
+        if scene.publish_is_published_file:
+            path_row.enabled = False
         
         # Versioning mode - Table style with icons
         col.separator(factor=0.5)
         col.label(text="Mode:", icon='MOD_BUILD')
         
-        # Grid layout for toggle buttons (both always enabled)
+        # Grid layout for toggle buttons
         row = col.row(align=True)
         row.prop_enum(scene, "publish_versioning_mode", 'OVERWRITE', text="Overwrite", icon='FILE_REFRESH')
         row.prop_enum(scene, "publish_versioning_mode", 'VERSIONING', text="Versioning", icon='LINENUMBERS_ON')
+        # Disable if published file
+        if scene.publish_is_published_file:
+            row.enabled = False
         
         # Preview target path
         if scene.publish_path and bpy.data.filepath:

@@ -16,7 +16,7 @@
 bl_info = {
     "name": "Asset Management",
     "author": "Rizqi Alfajri",
-    "version": (1, 5, 0),
+    "version": (1, 2, 0),
     "blender": (4, 0, 0),
     "location": "View3D > N Panel",
     "description": "Production-ready asset management with publishing workflow, texture optimization, and version control",
@@ -86,7 +86,6 @@ class AssetManagementPreferences(AddonPreferences):
     """Addon preferences for Asset Management"""
     bl_idname = __package__
     
-    # Default Paths
     default_publish_path: StringProperty(
         name="Default Publish Path",
         description="Default folder for publishing assets (auto-loaded when file opens)",
@@ -117,13 +116,13 @@ class AssetManagementPreferences(AddonPreferences):
     check_transform_issues: BoolProperty(
         name="Check Transform Issues",
         description="Validate transforms are applied (scale/rotation) before publishing",
-        default=True
+        default=False
     )
     
     check_empty_material_slots: BoolProperty(
         name="Check Empty Material Slots",
         description="Validate no empty or unused material slots exist before publishing",
-        default=False
+        default=True
     )
     
     check_duplicate_textures: BoolProperty(
@@ -144,6 +143,31 @@ class AssetManagementPreferences(AddonPreferences):
         description="Automatically save scene analysis reports to /reports folder (Plain Text format, always overwrite)",
         default=False
     )
+    
+    # Activity Logging
+    enable_activity_logging: BoolProperty(
+        name="Enable Activity Logging",
+        description="Track all operations performed in the addon",
+        default=False
+    )
+    
+    activity_log_location: EnumProperty(
+        name="Log Location",
+        description="Where to save activity log files",
+        items=[
+            ('PER_PROJECT', "Per-Project", "Save log in each .blend file's folder (.addon_activity.log)", 'FILE_FOLDER', 0),
+            ('GLOBAL', "Global", "Save log in addon folder (shared across all projects)", 'WORLD', 1),
+            ('CUSTOM', "Custom Path", "Choose custom location for log file", 'FILEBROWSER', 2)
+        ],
+        default='PER_PROJECT'
+    )
+    
+    activity_log_custom_path: StringProperty(
+        name="Custom Log Path",
+        description="Custom location for activity log file",
+        subtype='FILE_PATH',
+        default=""
+    )
 
     
     def draw(self, context):
@@ -151,19 +175,15 @@ class AssetManagementPreferences(AddonPreferences):
         layout.use_property_split = True
         layout.use_property_decorate = False
         
-        # Default Paths
         box = layout.box()
         box.label(text="Default Paths", icon='FILE_FOLDER')
-        
         col = box.column(align=True)
         col.prop(self, "default_publish_path")
         
-        # Validation Settings
         box = layout.box()
         box.label(text="Validation Settings", icon='CHECKMARK')
         
         col = box.column(align=True)
-        
         col.separator()
         col.label(text="Thresholds:", icon='DRIVER')
         col.prop(self, "check_texture_resolution")
@@ -178,10 +198,8 @@ class AssetManagementPreferences(AddonPreferences):
         col.prop(self, "check_duplicate_textures")
         col.prop(self, "check_duplicate_materials")
         
-        # Scene Analysis
         box = layout.box()
         box.label(text="Scene Analysis", icon='VIEWZOOM')
-        
         col = box.column(align=True)
         col.prop(self, "analysis_auto_save")
         
@@ -196,10 +214,36 @@ class AssetManagementPreferences(AddonPreferences):
             info_col.label(text="  • Scene_TexturePaths.txt", icon='BLANK1')
             info_col.label(text="Format: Plain Text (.txt), Always overwrite", icon='BLANK1')
         
-        # Support & Social Media
         box = layout.box()
-        box.label(text="Support & Social Media", icon='WORLD')
+        box.label(text="Activity Tracking", icon='FILE_TEXT')
+        col = box.column(align=True)
+        col.prop(self, "enable_activity_logging")
         
+        if self.enable_activity_logging:
+            layout.prop(self, "activity_log_location", text="")
+            
+            if self.activity_log_location == 'CUSTOM':
+                layout.prop(self, "activity_log_custom_path", text="")
+                        
+            from .utils.activity_logger import get_activity_stats
+            stats = get_activity_stats()
+            
+            box = layout.box()
+            col = box.column(align=True)
+            col.scale_y = 0.8
+            
+            if stats['exists']:
+                col.label(text=f"ℹ️ Current entries: {stats['entries']}", icon='BLANK1')
+                col.label(text=f"ℹ️ File size: {stats['size']} bytes", icon='BLANK1')
+            else:
+                col.label(text="ℹ️ No activity log yet", icon='INFO')
+                col.label(text="ℹ️ Log will be created on first operation", icon='BLANK1')
+            
+            layout.operator("asset.copy_activity_log_path", icon='COPYDOWN')
+        
+        layout.separator()
+        layout.label(text="Support & Social Media", icon='WORLD')
+        box = layout.box()
         col = box.column(align=True)
         col.scale_y = 1.2
         
@@ -235,6 +279,7 @@ def reset_publish_validation_on_load(dummy):
         scene.publish_is_published_file = False
         scene.publish_source_path = ""
         scene.publish_force = False
+        scene.publish_include_libraries = False
         scene.publish_libraries_validated = False
         scene.publish_library_count = 0
         scene.publish_library_errors = 0
@@ -245,6 +290,14 @@ def reset_publish_validation_on_load(dummy):
 
         if hasattr(scene, '_publish_detection_cached'):
             delattr(scene, '_publish_detection_cached')
+        
+        # Auto-detect published file status on file open
+        from .utils.published_file_detector import detect_published_file_status, update_published_file_cache
+        try:
+            is_published, source_path = detect_published_file_status(bpy.context)
+            update_published_file_cache(bpy.context, is_published, source_path)
+        except Exception as e:
+            print(f"Published file detection error: {e}")
         
         # Auto-load default publish path from preferences
         try:

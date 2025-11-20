@@ -15,34 +15,31 @@ class ASSET_OT_check_transform(bpy.types.Operator):
         if hasattr(context.scene, "highpoly_mode_active") and context.scene.highpoly_mode_active:
             bpy.ops.asset.exit_highpoly()
         
+        # Only save viewport state if NOT already in transform mode (prevent refresh overwrite)
+        if not context.scene.transform_mode_active:
+            for area in context.screen.areas:
+                if area.type == 'VIEW_3D':
+                    for space in area.spaces:
+                        if space.type == 'VIEW_3D':
+                            # Save original state (first time only)
+                            context.scene.transform_original_shading_type = space.shading.type
+                            context.scene.transform_original_color_type = space.shading.color_type
+                            context.scene.transform_original_bg = space.shading.background_color[:3]
+                            context.scene.transform_original_type = space.shading.background_type
+                            break
+                    break
+        
+        # Force to SOLID mode (only current viewport)
         for area in context.screen.areas:
             if area.type == 'VIEW_3D':
                 for space in area.spaces:
                     if space.type == 'VIEW_3D':
                         if space.shading.type != 'SOLID':
                             space.shading.type = 'SOLID'
-        
-        for area in context.screen.areas:
-            if area.type != 'VIEW_3D':
-                continue
-            for space in area.spaces:
-                if space.type != 'VIEW_3D':
-                    continue
-                if not hasattr(context.scene, "transform_original_bg"):
-                    context.scene.transform_original_bg = space.shading.background_color[:3]
-                if not hasattr(context.scene, "transform_original_type"):
-                    context.scene.transform_original_type = space.shading.background_type
-                if not hasattr(context.scene, "transform_original_color_type"):
-                    context.scene.transform_original_color_type = space.shading.color_type
-        
-        for area in context.screen.areas:
-            if area.type != 'VIEW_3D':
-                continue
-            for space in area.spaces:
-                if space.type != 'VIEW_3D':
-                    continue
-                space.shading.background_type = 'VIEWPORT'
-                space.shading.background_color = self.BACKGROUND_COLOR
+                        space.shading.background_type = 'VIEWPORT'
+                        space.shading.background_color = self.BACKGROUND_COLOR
+                        break
+                break
         
         issue_count = 0
         unapplied_scale_count = 0
@@ -482,6 +479,10 @@ class ASSET_OT_exit_transform(bpy.types.Operator):
             for space in area.spaces:
                 if space.type != 'VIEW_3D':
                     continue
+                # Restore shading type (SOLID/MATERIAL/RENDERED)
+                if hasattr(context.scene, "transform_original_shading_type"):
+                    space.shading.type = context.scene.transform_original_shading_type
+                
                 if hasattr(context.scene, "transform_original_type"):
                     space.shading.background_type = context.scene.transform_original_type
                 else:
@@ -534,6 +535,11 @@ def register():
     )
     bpy.types.Scene.transform_original_type = bpy.props.StringProperty(default='THEME')
     bpy.types.Scene.transform_original_color_type = bpy.props.StringProperty(default='MATERIAL')
+    bpy.types.Scene.transform_original_shading_type = bpy.props.StringProperty(
+        name="Original Shading Type",
+        description="Stored viewport shading type (SOLID/MATERIAL/RENDERED) for restoration",
+        default='SOLID',
+    )
     
     bpy.types.Scene.transform_danger_report = bpy.props.StringProperty(default="")
 
@@ -541,6 +547,8 @@ def register():
 def unregister():
     if hasattr(bpy.types.Scene, "transform_danger_report"):
         del bpy.types.Scene.transform_danger_report
+    if hasattr(bpy.types.Scene, "transform_original_shading_type"):
+        del bpy.types.Scene.transform_original_shading_type
     if hasattr(bpy.types.Scene, "transform_original_color_type"):
         del bpy.types.Scene.transform_original_color_type
     if hasattr(bpy.types.Scene, "transform_original_type"):

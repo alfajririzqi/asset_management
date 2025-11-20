@@ -937,15 +937,25 @@ class ASSET_OT_Publish(bpy.types.Operator):
             if context.scene.publish_include_libraries and self.libraries_to_publish:
                 library_count = len(self.libraries_to_publish)
                 self.report({'INFO'}, f"Publishing {library_count} linked libraries")
+                
+                from ..utils.activity_logger import log_activity
+                log_activity(
+                    "PUBLISH_START",
+                    f"Asset: {self.asset_name} | Libraries: {library_count}",
+                    context
+                )
             
             published_libraries = []
+            from ..utils.activity_logger import log_activity
+            
             for lib_info in self.libraries_to_publish:
                 try:
                     lib_path = self.publish_linked_library(lib_info, context)
                     published_libraries.append({
                         'name': lib_info['folder_name'],
                         'path': lib_path,
-                        'structure': lib_info['structure']
+                        'structure': lib_info['structure'],
+                        'source': lib_info['filepath']
                     })
                     
                     lib_folder = os.path.dirname(lib_path)
@@ -953,8 +963,20 @@ class ASSET_OT_Publish(bpy.types.Operator):
                     
                     self.report({'INFO'}, f"Published library: {lib_info['folder_name']}")
                     
+                    log_activity(
+                        "PUBLISH_LIBRARY",
+                        f"{lib_info['folder_name']} | Structure: {lib_info['structure']} | Textures: {tex_count} | Status: SUCCESS",
+                        context
+                    )
+                    
                 except Exception as e:
                     self.report({'WARNING'}, f"Failed to publish library {lib_info['folder_name']}: {str(e)}")
+                    
+                    log_activity(
+                        "PUBLISH_LIBRARY",
+                        f"{lib_info['folder_name']} | Structure: {lib_info['structure']} | Status: FAILED - {str(e)}",
+                        context
+                    )
             
             published_path = self.publish_master_file(
                 source_path=current_file,
@@ -963,6 +985,8 @@ class ASSET_OT_Publish(bpy.types.Operator):
             )
             
             self.report({'INFO'}, f"Published master file: {os.path.basename(published_path)}")
+            
+            from ..utils.activity_logger import log_activity
             
             target_textures = os.path.join(master_target_folder, "textures")
             os.makedirs(target_textures, exist_ok=True)
@@ -976,6 +1000,12 @@ class ASSET_OT_Publish(bpy.types.Operator):
                     copied_count += 1
             elif not os.path.exists(master_textures_dir):
                 self.report({'INFO'}, "No textures folder found - publishing without textures")
+            
+            log_activity(
+                "PUBLISH_MASTER",
+                f"{os.path.basename(published_path)} | Textures: {copied_count} | Target: {os.path.basename(master_target_folder)}",
+                context
+            )
             
             if published_libraries:
                 relinked_count = self.relink_external_libraries(
@@ -1039,6 +1069,22 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 f"{copied_count} textures | Target: {master_target_folder}{unpack_text}"
             )
             
+            successful_libs = len(published_libraries)
+            total_libs = len(self.libraries_to_publish) if self.libraries_to_publish else 0
+            
+            if total_libs > 0:
+                log_activity(
+                    "PUBLISH_COMPLETE",
+                    f"Asset: {self.asset_name} | Libraries: {successful_libs}/{total_libs} successful | Status: {status}",
+                    context
+                )
+            else:
+                log_activity(
+                    "PUBLISH_COMPLETE",
+                    f"Asset: {self.asset_name} | Textures: {copied_count} | Status: {status}",
+                    context
+                )
+            
             context.scene.publish_force = False
             context.scene.publish_libraries_validated = False
             
@@ -1056,6 +1102,13 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 )
             except:
                 pass
+            
+            from ..utils.activity_logger import log_activity
+            log_activity(
+                "PUBLISH_FAILED",
+                f"Asset: {self.asset_name} | Error: {str(e)}",
+                context
+            )
             
             self.report({'ERROR'}, f"Publish failed: {str(e)}")
             return {'CANCELLED'}
@@ -1087,7 +1140,8 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 f"  └─ LINKED | "
                 f"Library: {lib['name']} | "
                 f"Structure: {lib['structure']} | "
-                f"Path: {lib['path']}\n"
+                f"Path: {lib['path']} | "
+                f"Source: {lib.get('source', 'Unknown')}\n"
             )
         
         try:
@@ -1105,6 +1159,7 @@ class ASSET_OT_CopyLibraryPath(bpy.types.Operator):
     """Copy library file path to clipboard"""
     bl_idname = "asset.copy_library_path"
     bl_label = "Copy Library Path"
+    bl_description = "Copy linked library file path to clipboard for easy access"
     bl_options = {'REGISTER'}
     
     library_path: StringProperty(name="Library Path")
@@ -1222,6 +1277,26 @@ class ASSET_OT_OpenLibraryFile(bpy.types.Operator):
             return {'CANCELLED'}
 
 
+class ASSET_OT_CopySourcePath(bpy.types.Operator):
+    """Copy source file path to clipboard"""
+    bl_idname = "asset.copy_source_path"
+    bl_label = "Copy Source Path"
+    bl_description = "Copy original source file path to clipboard"
+    bl_options = {'REGISTER'}
+    
+    source_path: StringProperty(name="Source Path")
+    
+    def execute(self, context):
+        """Copy source path to clipboard"""
+        try:
+            context.window_manager.clipboard = self.source_path
+            self.report({'INFO'}, f"Copied source path to clipboard")
+            return {'FINISHED'}
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to copy: {str(e)}")
+            return {'CANCELLED'}
+
+
 # =============================================================================
 # ADDON REGISTRATION
 # =============================================================================
@@ -1232,6 +1307,7 @@ def register():
     bpy.utils.register_class(ASSET_OT_CopyLibraryPath)
     bpy.utils.register_class(ASSET_OT_ReloadLibrary)
     bpy.utils.register_class(ASSET_OT_OpenLibraryFile)
+    bpy.utils.register_class(ASSET_OT_CopySourcePath)
     
     # ===== Publishing Settings =====
     bpy.types.Scene.publish_structure = StringProperty(
@@ -1357,6 +1433,7 @@ def toggle_all_libraries(context):
 
 
 def unregister():
+    bpy.utils.unregister_class(ASSET_OT_CopySourcePath)
     bpy.utils.unregister_class(ASSET_OT_OpenLibraryFile)
     bpy.utils.unregister_class(ASSET_OT_ReloadLibrary)
     bpy.utils.unregister_class(ASSET_OT_CopyLibraryPath)

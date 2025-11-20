@@ -31,7 +31,8 @@ from . import (
     clear_orphan_data,
     clear_material_slots,
     publish,
-    check_publish
+    check_publish,
+    copy_log_path
 )
 
 modules = [
@@ -48,6 +49,7 @@ modules = [
     restore_image_format,
     restore_resolution,
     versioning,
+    copy_log_path,
     check_scene,
     clear_orphan_data,
     clear_material_slots,

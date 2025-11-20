@@ -20,7 +20,7 @@ class SCENE_OT_ClearOrphanData(bpy.types.Operator):
             self.report({'INFO'}, "No unused data found")
             return {'CANCELLED'}
         
-        return context.window_manager.invoke_props_dialog(self, width=400)
+        return context.window_manager.invoke_props_dialog(self, width=500)
 
     def draw(self, context):
         layout = self.layout
@@ -92,10 +92,12 @@ class SCENE_OT_ClearOrphanData(bpy.types.Operator):
         
         removed_libraries = self._clear_unused_libraries()
         
-        # Report
         msg = f"✅ Removed {removed_orphans} orphan datablock(s)"
         if removed_libraries > 0:
             msg += f" • {removed_libraries} unused library(ies)"
+        
+        from ..utils.activity_logger import log_activity
+        log_activity("CLEAR_ORPHAN_DATA", f"Orphans: {removed_orphans} | Libraries: {removed_libraries}", context)
         
         self.report({'INFO'}, msg)
         return {'FINISHED'}

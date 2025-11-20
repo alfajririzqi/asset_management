@@ -34,45 +34,80 @@ class ASSET_OT_optimize_texture_duplicates(bpy.types.Operator):
         if not self.duplicate_groups:
             self.report({'INFO'}, "No duplicate textures detected")
             return {'CANCELLED'}
-        return context.window_manager.invoke_props_dialog(self)
+        return context.window_manager.invoke_props_dialog(self, width=500)
 
     def draw(self, context):
         layout = self.layout
         
         total_duplicates = sum(len(group) - 1 for group in self.duplicate_groups)
+        total_groups = len(self.duplicate_groups)
         
         # Header with summary
         box = layout.box()
-        box.label(text=f"🖼️  Found {len(self.duplicate_groups)} duplicate group(s)", icon='INFO')
+        box.label(text=f"🖼️ Found {total_groups} duplicate group(s)", icon='INFO')
         box.label(text=f"Total {total_duplicates} texture(s) will be merged", icon='TEXTURE')
         
         layout.separator()
         
-        max_groups = 15
-        for i, group in enumerate(self.duplicate_groups[:max_groups]):
-            if i > 0:
-                layout.separator(factor=0.5)
-            
-            base = group[0]
-            layout.label(text=f"Base: {base.name}", icon='TEXTURE')
-            
-            duplicates = group[1:]
-            if duplicates:
-                grid = layout.grid_flow(row_major=True, columns=2, align=True)
-                grid.scale_y = 0.8
-                
-                max_display = 6  
-                for img in duplicates[:max_display]:
-                    grid.label(text=f"→ {img.name}", icon='LINKED')
-                
-                if len(duplicates) > max_display:
-                    layout.label(text=f"  ... and {len(duplicates) - max_display} more", icon='THREE_DOTS')
+        max_display_groups = 10
+        groups_to_show = self.duplicate_groups[:max_display_groups]
         
-        # Show "more groups" if many groups
-        if len(self.duplicate_groups) > max_groups:
+        if total_groups <= 5:
+            # 1 COLUMN LAYOUT (vertical)
+            for i, group in enumerate(groups_to_show):
+                if i > 0:
+                    layout.separator(factor=0.5)
+                
+                base = group[0]
+                duplicates = group[1:]
+                
+                box = layout.box()
+                box.label(text=f"Base: {base.name}", icon='TEXTURE')
+                
+                if duplicates:
+                    col = box.column(align=True)
+                    col.scale_y = 0.8
+                    
+                    max_items = 3
+                    for img in duplicates[:max_items]:
+                        col.label(text=f"  • {img.name}", icon='LINKED')
+                    
+                    if len(duplicates) > max_items:
+                        col.label(text=f"  ... and {len(duplicates) - max_items} more", icon='THREE_DOTS')
+        else:
+            # 2 COLUMN TABLE LAYOUT (side by side)
+            split = layout.split(factor=0.5)
+            col_left = split.column()
+            col_right = split.column()
+            
+            for i, group in enumerate(groups_to_show):
+                base = group[0]
+                duplicates = group[1:]
+                
+                col = col_left if i < 5 else col_right
+                
+                if i % 5 > 0:
+                    col.separator(factor=0.5)
+                
+                box = col.box()
+                box.label(text=f"Base: {base.name}", icon='TEXTURE')
+                
+                if duplicates:
+                    sub = box.column(align=True)
+                    sub.scale_y = 0.8
+                    
+                    max_items = 3
+                    for img in duplicates[:max_items]:
+                        sub.label(text=f"  • {img.name}", icon='LINKED')
+                    
+                    if len(duplicates) > max_items:
+                        sub.label(text=f"  ... and {len(duplicates) - max_items} more", icon='THREE_DOTS')
+        
+        # Show "more groups" if total > 5
+        if total_groups > max_display_groups:
             layout.separator()
             row = layout.row()
-            row.label(text=f"... and {len(self.duplicate_groups) - max_groups} more groups", icon='THREE_DOTS')
+            row.label(text=f"... and {total_groups - max_display_groups} more groups", icon='THREE_DOTS')
 
     def execute(self, context):
         textures_removed = 0
@@ -131,16 +166,41 @@ class TEXTURE_OT_BatchRenameFiles(bpy.types.Operator):
 
     def invoke(self, context, event):
         return context.window_manager.invoke_confirm(self, event)
+    
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Rename files on disk to match Blender names?", icon='FILE_REFRESH')
+        layout.separator()
+        layout.label(text="Note: External & packed textures will be skipped", icon='INFO')
 
     def execute(self, context):
+        from ..utils.texture_detector import detect_external_and_packed_textures
+        
         blend_dir = os.path.dirname(bpy.data.filepath)
         if not blend_dir:
             self.report({'ERROR'}, ".blend file must be saved first")
             return {'CANCELLED'}
+        
+        # Detect textures to skip
+        external_imgs, packed_imgs, local_imgs = detect_external_and_packed_textures(context)
 
-        renamed, skipped, errors = 0, 0, 0
+        renamed = 0
+        skipped = 0
+        skipped_external = 0
+        skipped_packed = 0
+        errors = 0
 
         for img in bpy.data.images:
+            # Skip packed textures
+            if img.name in packed_imgs:
+                skipped_packed += 1
+                continue
+            
+            # Skip external textures
+            if img.name in external_imgs:
+                skipped_external += 1
+                continue
+            
             if img.packed_file or not img.filepath_raw:
                 skipped += 1
                 continue
@@ -183,13 +243,37 @@ class TEXTURE_OT_BatchRenameFiles(bpy.types.Operator):
                 self.report({'ERROR'}, f"Error renaming {os.path.basename(abs_path)}: {str(e)}")
                 errors += 1
 
-        self.report({'INFO'}, f"Done: {renamed} renamed, {skipped} skipped, {errors} errors")
+        msg = f"Renamed: {renamed}"
+        if skipped > 0:
+            msg += f" | Skipped: {skipped}"
+        if skipped_external > 0:
+            msg += f" | External: {skipped_external}"
+        if skipped_packed > 0:
+            msg += f" | Packed: {skipped_packed}"
+        if errors > 0:
+            msg += f" | Errors: {errors}"
+        
+        self.report({'INFO'}, msg)
+        
+        # Log activity
+        from ..utils.activity_logger import log_activity
+        details = f"Renamed: {renamed}"
+        if skipped_external > 0:
+            details += f" | External: {skipped_external}"
+        if skipped_packed > 0:
+            details += f" | Packed: {skipped_packed}"
+        if errors > 0:
+            details += f" | Errors: {errors}"
+        
+        log_activity("BATCH_RENAME_FILES", details, context)
+        
         return {'FINISHED'}
 
 
 class TEXTURE_OT_AddFindReplace(bpy.types.Operator):
     bl_idname = "texture.add_findreplace"
     bl_label = "Add Find/Replace"
+    bl_description = "Add a new find and replace rule for batch texture renaming"
 
     def execute(self, context):
         props = context.scene.texture_batch_renamer
@@ -201,6 +285,7 @@ class TEXTURE_OT_AddFindReplace(bpy.types.Operator):
 class TEXTURE_OT_RemoveFindReplace(bpy.types.Operator):
     bl_idname = "texture.remove_findreplace"
     bl_label = "Remove Find/Replace"
+    bl_description = "Remove the selected find and replace rule from the list"
 
     def execute(self, context):
         props = context.scene.texture_batch_renamer

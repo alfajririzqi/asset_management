@@ -35,12 +35,12 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
         
         if node.type == 'TEX_IMAGE':
             if node.image:
-                props.append(('image_name', node.image.name))
+                props.append(('image_filepath', node.image.filepath))
                 props.append(('colorspace', node.image.colorspace_settings.name))
                 props.append(('interpolation', node.interpolation))
                 props.append(('extension', node.extension))
             else:
-                props.append(('image_name', None))
+                props.append(('image_filepath', None))
         
         elif node.type == 'BSDF_PRINCIPLED':
             for input in node.inputs:
@@ -157,7 +157,7 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
                     if val is not None:
                         props.append((f'input_{input.name}', val))
         
-        return tuple(sorted(props))
+        return tuple(sorted(props, key=lambda x: x[0]))
 
     def get_material_hash(self, material):
         """Generate a comprehensive hash from material properties and node tree structure."""
@@ -166,11 +166,15 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
 
         props = []
         
-        # Basic material properties
         props.append(('diffuse_color', tuple(round(v, 6) for v in material.diffuse_color)))
         props.append(('metallic', round(material.metallic, 6)))
         props.append(('roughness', round(material.roughness, 6)))
         props.append(('use_nodes', material.use_nodes))
+        
+        if hasattr(material, 'blend_method'):
+            props.append(('blend_method', material.blend_method))
+        if hasattr(material, 'shadow_method'):
+            props.append(('shadow_method', material.shadow_method))
         
         if material.use_nodes and material.node_tree:
             node_data = []
@@ -183,14 +187,14 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
                     for link in output.links:
                         connections.append((
                             output.name,
-                            link.to_node.name,  
+                            link.to_node.type,
                             link.to_socket.name
                         ))
                 
-                node_tuple = (node.name, node_props, tuple(sorted(connections)))
+                node_tuple = (node_props, tuple(sorted(connections)))
                 node_data.append(node_tuple)
             
-            props.append(('nodes', tuple(sorted(node_data, key=lambda x: x[0]))))
+            props.append(('nodes', tuple(sorted(node_data, key=str))))
         
         try:
             return hash(tuple(props))
@@ -201,6 +205,10 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
         """Find groups of materials that share identical properties."""
         material_groups = defaultdict(list)
         
+        print("\n" + "="*60)
+        print("DEBUG: Material Hash Analysis")
+        print("="*60)
+        
         for material in bpy.data.materials:
             if material.users == 0:
                 continue
@@ -208,9 +216,32 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
             try:
                 mat_hash = self.get_material_hash(material)
                 material_groups[mat_hash].append(material)
+                
+                print(f"\n{material.name}:")
+                print(f"  Hash: {mat_hash}")
+                print(f"  Users: {material.users}")
+                if material.use_nodes and material.node_tree:
+                    print(f"  Nodes: {len(material.node_tree.nodes)}")
+                    for node in material.node_tree.nodes:
+                        if node.type == 'TEX_IMAGE' and node.image:
+                            print(f"    - {node.type}: {node.image.filepath}")
+                        else:
+                            print(f"    - {node.type}")
+                            
             except Exception as e:
                 print(f"Error hashing material {material.name}: {e}")
+                import traceback
+                traceback.print_exc()
                 continue
+
+        print("\n" + "="*60)
+        print(f"Total hash groups: {len(material_groups)}")
+        for hash_val, mats in material_groups.items():
+            if len(mats) > 1:
+                print(f"\nDuplicate group ({len(mats)} materials):")
+                for mat in mats:
+                    print(f"  - {mat.name}")
+        print("="*60 + "\n")
 
         return [mats for mats in material_groups.values() if len(mats) > 1]
 
@@ -221,46 +252,80 @@ class ASSET_OT_optimize_material_duplicates(bpy.types.Operator):
             self.report({'INFO'}, "No duplicate materials detected")
             return {'CANCELLED'}
         
-        return context.window_manager.invoke_props_dialog(self)
+        return context.window_manager.invoke_props_dialog(self, width=500)
 
     def draw(self, context):
         layout = self.layout
         
         total_duplicates = sum(len(group) - 1 for group in self.duplicate_groups)
+        total_groups = len(self.duplicate_groups)
         
         # Header with summary
         box = layout.box()
-        box.label(text=f"📦 Found {len(self.duplicate_groups)} duplicate group(s)", icon='INFO')
+        box.label(text=f"📦 Found {total_groups} duplicate group(s)", icon='INFO')
         box.label(text=f"Total {total_duplicates} material(s) will be merged", icon='MATERIAL')
         
         layout.separator()
         
-        max_groups = 15
-        for i, group in enumerate(self.duplicate_groups[:max_groups]):
-            if i > 0:
-                layout.separator(factor=0.5)
-            
-            base = group[0]
-            layout.label(text=f"Base: {base.name}", icon='MATERIAL')
-            
-            duplicates = group[1:]
-            if duplicates:
-                grid = layout.grid_flow(row_major=True, columns=2, align=True)
-                grid.scale_y = 0.8
-                
-                max_display = 6  
-                for mat in duplicates[:max_display]:
-                    grid.label(text=f"→ {mat.name}", icon='LINKED')
-                
-                # Show "more items" if list is long
-                if len(duplicates) > max_display:
-                    layout.label(text=f"  ... and {len(duplicates) - max_display} more", icon='THREE_DOTS')
+        max_display_groups = 10
+        groups_to_show = self.duplicate_groups[:max_display_groups]
         
-        # Show "more groups" if many groups
-        if len(self.duplicate_groups) > max_groups:
+        if total_groups <= 5:
+            # 1 COLUMN LAYOUT (vertical)
+            for i, group in enumerate(groups_to_show):
+                if i > 0:
+                    layout.separator(factor=0.5)
+                
+                base = group[0]
+                duplicates = group[1:]
+                
+                box = layout.box()
+                box.label(text=f"Base: {base.name}", icon='MATERIAL')
+                
+                if duplicates:
+                    col = box.column(align=True)
+                    col.scale_y = 0.8
+                    
+                    max_items = 3
+                    for mat in duplicates[:max_items]:
+                        col.label(text=f"  • {mat.name}", icon='LINKED')
+                    
+                    if len(duplicates) > max_items:
+                        col.label(text=f"  ... and {len(duplicates) - max_items} more", icon='THREE_DOTS')
+        else:
+            # 2 COLUMN TABLE LAYOUT (side by side)
+            split = layout.split(factor=0.5)
+            col_left = split.column()
+            col_right = split.column()
+            
+            for i, group in enumerate(groups_to_show):
+                base = group[0]
+                duplicates = group[1:]
+                
+                col = col_left if i < 5 else col_right
+                
+                if i % 5 > 0:
+                    col.separator(factor=0.5)
+                
+                box = col.box()
+                box.label(text=f"Base: {base.name}", icon='MATERIAL')
+                
+                if duplicates:
+                    sub = box.column(align=True)
+                    sub.scale_y = 0.8
+                    
+                    max_items = 3
+                    for mat in duplicates[:max_items]:
+                        sub.label(text=f"  • {mat.name}", icon='LINKED')
+                    
+                    if len(duplicates) > max_items:
+                        sub.label(text=f"  ... and {len(duplicates) - max_items} more", icon='THREE_DOTS')
+        
+        # Show "more groups" if total > 5
+        if total_groups > max_display_groups:
             layout.separator()
             row = layout.row()
-            row.label(text=f"... and {len(self.duplicate_groups) - max_groups} more groups", icon='THREE_DOTS')
+            row.label(text=f"... and {total_groups - max_display_groups} more groups", icon='THREE_DOTS')
 
     def execute(self, context):
         materials_removed = 0

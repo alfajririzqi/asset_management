@@ -32,7 +32,6 @@ class ASSET_STATS_PT_panel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         
-        # Count statistics (exclude Render Result & Viewer Node)
         total_objects = len([obj for obj in bpy.data.objects if obj.type == 'MESH'])
         total_materials = len(bpy.data.materials)
         total_textures = len([img for img in bpy.data.images 
@@ -59,21 +58,18 @@ class ASSET_STATS_PT_panel(bpy.types.Panel):
         
         box = layout.box()
         
-        # Row 1
         split = box.split(factor=0.5)
         col1 = split.column(align=True)
         col1.label(text=f"📦 Objects: {total_objects}")
         col2 = split.column(align=True)
         col2.label(text=f"📚 Libraries: {total_libraries}")
         
-        # Row 2
         split = box.split(factor=0.5)
         col1 = split.column(align=True)
         col1.label(text=f"🎨 Materials: {total_materials}")
         col2 = split.column(align=True)
         col2.label(text=f"🔗 NodeGroups: {total_nodegroups}")
         
-        # Row 3
         split = box.split(factor=0.5)
         col1 = split.column(align=True)
         col1.label(text=f"🖼️  Textures: {total_textures}")
@@ -256,6 +252,11 @@ class ASSET_OPTIMIZATION_PT_panel(bpy.types.Panel):
             warning_col = warning_row.column(align=True)
             warning_col.scale_y = 0.8
             warning_col.label(text="🚫 Published file - Operations disabled", icon='ERROR')
+            if source_path:
+                row = warning_col.row()
+                row.scale_y = 1.2
+                op = row.operator("asset.copy_source_path", text=f"Source: {source_path}", icon='COPYDOWN', emboss=False)
+                op.source_path = source_path
             layout.separator()
         
         # ====================================================================

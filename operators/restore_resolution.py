@@ -78,11 +78,13 @@ class TEXTURE_OT_RestoreResolution(bpy.types.Operator):
             self.report({'INFO'}, "No resolution backup files (.hires) found")
             return {'CANCELLED'}
 
-        return context.window_manager.invoke_props_dialog(self)
+        return context.window_manager.invoke_props_dialog(self, width=500)
 
     def draw(self, context):
         layout = self.layout
         layout.label(text=f"Found {self.total_backups} backup file(s) in {len(self.backup_folders_found)} location(s)", icon='INFO')
+        layout.separator()
+        layout.label(text="Note: External & packed textures will be skipped", icon='INFO')
 
         if len(self.backup_folders_found) <= 3:
             for backup_dir in self.backup_folders_found:
@@ -121,8 +123,15 @@ class TEXTURE_OT_RestoreResolution(bpy.types.Operator):
         layout.label(text="Backup files (*.hires) will be deleted", icon='ERROR')
 
     def execute(self, context):
+        from ..utils.texture_detector import detect_external_and_packed_textures
+        
+        # Detect textures to skip
+        external_imgs, packed_imgs, local_imgs = detect_external_and_packed_textures(context)
+        
         restored = 0
         skipped = 0
+        skipped_external = 0
+        skipped_packed = 0
         failed = 0
         deleted_downgraded = 0
         blend_dir = os.path.dirname(bpy.data.filepath)
@@ -136,6 +145,27 @@ class TEXTURE_OT_RestoreResolution(bpy.types.Operator):
                     backup_filename = os.path.basename(backup_path)
                     original_filename = backup_filename[:-6]  
                     restore_path = os.path.join(parent_dir, original_filename)
+                    
+                    # Check if corresponding image is external or packed
+                    should_skip = False
+                    restore_abs = os.path.normpath(restore_path)
+                    for img in bpy.data.images:
+                        if img.source != 'FILE':
+                            continue
+                        if img.filepath:
+                            img_abs = os.path.normpath(bpy.path.abspath(img.filepath))
+                            if img_abs == restore_abs:
+                                if img.name in external_imgs:
+                                    skipped_external += 1
+                                    should_skip = True
+                                    break
+                                elif img.name in packed_imgs:
+                                    skipped_packed += 1
+                                    should_skip = True
+                                    break
+                    
+                    if should_skip:
+                        continue
 
                     if not os.path.exists(restore_path):
                         self.report({'WARNING'}, f"Downgraded file not found: {original_filename}")
@@ -165,13 +195,32 @@ class TEXTURE_OT_RestoreResolution(bpy.types.Operator):
 
         msg = f"Restored {restored} file(s)"
         if deleted_downgraded > 0:
-            msg += f" • Deleted {deleted_downgraded} downgraded file(s)"
+            msg += f" | Deleted {deleted_downgraded} downgraded"
         if skipped > 0:
-            msg += f" • Skipped {skipped}"
+            msg += f" | Skipped {skipped}"
+        if skipped_external > 0:
+            msg += f" | External {skipped_external}"
+        if skipped_packed > 0:
+            msg += f" | Packed {skipped_packed}"
         if failed > 0:
-            msg += f" • Failed {failed}"
+            msg += f" | Failed {failed}"
 
         self.report({'INFO'}, msg)
+        
+        # Log activity
+        from ..utils.activity_logger import log_activity
+        details = f"Restored: {restored}"
+        if deleted_downgraded > 0:
+            details += f" | Deleted: {deleted_downgraded}"
+        if skipped_external > 0:
+            details += f" | External: {skipped_external}"
+        if skipped_packed > 0:
+            details += f" | Packed: {skipped_packed}"
+        if failed > 0:
+            details += f" | Failed: {failed}"
+        
+        log_activity("RESTORE_RESOLUTION", details, context)
+        
         return {'FINISHED'}
 
     def _update_image_datablock(self, restored_path, blend_dir):

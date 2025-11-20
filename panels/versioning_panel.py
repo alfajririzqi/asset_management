@@ -17,17 +17,14 @@ class FILE_PT_Versioning(bpy.types.Panel):
         layout = self.layout
         scene = context.scene
         
-        # Auto-detect if file is from versions folder
         is_version_file = False
         if bpy.data.filepath:
             current_dir = os.path.dirname(bpy.data.filepath)
             if os.path.basename(current_dir) == "versions" or "versions" + os.sep in bpy.data.filepath:
                 is_version_file = True
         
-        # Auto-detect published file
         is_published, source_path = detect_published_file_status(context)
 
-        # Active file info box
         box = layout.box()
         if bpy.data.filepath:
             fname = os.path.basename(bpy.data.filepath)
@@ -46,7 +43,6 @@ class FILE_PT_Versioning(bpy.types.Panel):
         else:
             box.label(text="File not saved", icon='ERROR')
         
-        # Published file warning (inline)
         if is_published:
             layout.separator()
             warning_row = layout.row()
@@ -55,9 +51,11 @@ class FILE_PT_Versioning(bpy.types.Panel):
             warning_col.scale_y = 0.8
             warning_col.label(text="🚫 Published file - Operations disabled", icon='ERROR')
             if source_path:
-                warning_col.label(text=f"Source: {source_path}", icon='BLANK1')
+                row = warning_col.row()
+                row.scale_y = 1.2
+                op = row.operator("asset.copy_source_path", text=f"Source: {source_path}", icon='COPYDOWN', emboss=False)
+                op.source_path = source_path
         
-        # Version file warning (inline)
         if is_version_file:
             layout.separator()
             warning_row = layout.row()
@@ -67,7 +65,6 @@ class FILE_PT_Versioning(bpy.types.Panel):
             warning_col.label(text="🚫 Version file - Cannot create version", icon='ERROR')
             warning_col.label(text="Open the original file to create versions", icon='BLANK1')
 
-        # Create version button
         row = layout.row(align=True)
         row.scale_y = 1.3
         col = row.column(align=True)
@@ -88,11 +85,14 @@ class FILE_PT_Versioning(bpy.types.Panel):
         row.enabled = can_restore
         row.operator("file.restore_version", icon='FILE_TICK', text="Restore")
 
-        # Version statistics
         if bpy.data.filepath:
             versions_dir = os.path.join(os.path.dirname(bpy.data.filepath), "versions")
             if os.path.exists(versions_dir):
-                blends = [f for f in os.listdir(versions_dir) if f.endswith('.blend')]
+                import re
+                current_name = os.path.splitext(os.path.basename(bpy.data.filepath))[0]
+                pattern = re.compile(rf"^{re.escape(current_name)}_v\d{{3}}\.blend$")
+                
+                blends = [f for f in os.listdir(versions_dir) if pattern.match(f)]
                 blends.sort(key=lambda f: os.path.getmtime(os.path.join(versions_dir, f)), reverse=True)
                 count = len(blends)
                 
