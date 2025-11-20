@@ -391,15 +391,6 @@ asset_management/
 
 ---
 
-## 📚 Documentation
-
-| Resource | Description |
-|----------|-------------|
-| **[CHANGELOG.md](CHANGELOG.md)** | Version history and updates |
-| **[.github/copilot-instructions.md](.github/copilot-instructions.md)** | Architecture guide for developers |
-
----
-
 ## 🐛 Troubleshooting
 
 <details>
@@ -500,11 +491,9 @@ Share your ideas on [GitHub Discussions](https://github.com/alfajririzqi/asset_m
 If this addon saves you time:
 - ⭐ **Star this repo** on GitHub
 - 📢 **Share** with fellow Blender artists
-- 💬 **Leave feedback** on [Blender Artists Forum](https://blenderartists.org/)
 
 ### ☕ Support Development
 This addon is **100% free** and always will be. If you'd like to support development:
-- 💙 [Buy me a coffee](https://ko-fi.com/yourusername) *(optional link)*
 - 🎓 Share tutorials/workflows using this addon
 - 🤝 Contribute code or documentation
 
@@ -625,11 +614,8 @@ Scenario: Multi-platform delivery
 • Unreal needs PNG
 • Web needs WebP
 
-v1.0 FREE (Manual):
-• Convert 200 textures to TGA (one by one)
-• Convert 200 textures to PNG (one by one)
-• Convert 200 textures to WebP (one by one)
-• Time: 1-2 hours ⏰
+v1.0 FREE (Not Support):
+• Does not support convert any format except PNG and JPEG/JPG
 
 v2.0 PRO (Batch):
 • Select all project files
