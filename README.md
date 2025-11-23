@@ -9,7 +9,7 @@
 [![Blender](https://img.shields.io/badge/Blender-4.0+-orange?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-green)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.2.0-brightgreen)](https://github.com/alfajririzqi/asset_management/releases)
+[![Version](https://img.shields.io/badge/Version-1.2.1-brightgreen)](https://github.com/alfajririzqi/asset_management/releases)
 [![Free](https://img.shields.io/badge/💎-100%25_FREE-success)](https://github.com/alfajririzqi/asset_management)
 
 [✨ Features](#-features) • [📥 Installation](#-installation) • [🚀 Quick Start](#-quick-start) • [💬 Support](#-support)
@@ -801,6 +801,6 @@ Made by [Rizqi Alfajri](https://github.com/alfajririzqi) for Blender Artists Wor
 
 ---
 
-**Version 1.2.0** • Last Updated: November 20, 2025 • Blender 4.0+
+**Version 1.2.1** • Last Updated: November 20, 2025 • Blender 4.0+
 
 </div>

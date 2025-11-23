@@ -59,6 +59,11 @@ class TEXTURE_OT_CleanupUnusedTextures(bpy.types.Operator):
         for img in bpy.data.images:
             if img.source != 'FILE':
                 continue
+            
+            # SKIP: Ignore external link images (library overrides)
+            if img.library:
+                continue
+            
             try:
                 abs_path = bpy.path.abspath(img.filepath)
                 norm_path = os.path.normpath(abs_path)

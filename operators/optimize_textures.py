@@ -145,13 +145,29 @@ class TEXTURE_OT_BatchRename(bpy.types.Operator):
             if img.source != 'FILE':
                 continue
             name = img.name
+            
+            # Apply find/replace
             for pair in props.find_replace:
                 if pair.find:
                     name = name.replace(pair.find, pair.replace)
-            if props.prefix_text and not name.startswith(props.prefix_text):
-                name = props.prefix_text + name
-            if props.suffix_text and not name.endswith(props.suffix_text):
-                name += props.suffix_text
+            
+            # Split name and extension
+            if '.' in name:
+                base_name, extension = name.rsplit('.', 1)
+                extension = '.' + extension
+            else:
+                base_name = name
+                extension = ''
+            
+            if props.prefix_text and not base_name.startswith(props.prefix_text):
+                base_name = props.prefix_text + base_name
+            
+            if props.suffix_text and not base_name.endswith(props.suffix_text):
+                base_name += props.suffix_text
+            
+            # Reconstruct full name
+            name = base_name + extension
+            
             if name != img.name:
                 img.name = name
         self.report({'INFO'}, "Textures renamed successfully")

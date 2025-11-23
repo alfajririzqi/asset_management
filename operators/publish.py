@@ -338,7 +338,7 @@ class ASSET_OT_Publish(bpy.types.Operator):
             self.validation_warnings.append(f"External textures found ({len(external_textures)}). Will copy only local textures")
         
         if packed_textures:
-            self.validation_warnings.append(f"Packed textures ({len(packed_textures)}) will be auto-unpacked to /textures after publish")
+            self.validation_warnings.append(f"Packed textures ({len(packed_textures)}) - will remain packed in published file")
         
         return len(self.validation_errors) == 0
     
@@ -372,18 +372,22 @@ class ASSET_OT_Publish(bpy.types.Operator):
         return used_textures
     
     def scan_textures_folder(self, textures_dir):
-        """Scan textures folder and categorize files"""
+        """Scan textures folder recursively and categorize files"""
         IMAGE_EXTENSIONS = {
             'png', 'jpg', 'jpeg', 'tga', 'bmp', 'tiff', 'webp', 'exr', 'hdr', 'dds',
             'psd', 'svg', 'gif',
         }
         
+        # Recursively scan all subfolders using os.walk
         all_files = []
-        for ext in IMAGE_EXTENSIONS:
-            all_files.extend(glob.glob(os.path.join(textures_dir, f"*.{ext}")))
-            all_files.extend(glob.glob(os.path.join(textures_dir, f"*.{ext.upper()}")))
-        
-        all_files = list(set(all_files))
+        for root, dirs, files in os.walk(textures_dir):
+            # Skip hidden folders (.backup, .trash)
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            
+            for file in files:
+                ext = file.rsplit('.', 1)[-1].lower() if '.' in file else ''
+                if ext in IMAGE_EXTENSIONS:
+                    all_files.append(os.path.join(root, file))
         
         used_textures = self.get_used_textures()
         
@@ -750,6 +754,13 @@ class ASSET_OT_Publish(bpy.types.Operator):
         
         target_path = self.get_target_path(context)
         target_folder = os.path.basename(target_path).replace('.blend', '')
+        
+        # For include libraries, show parent folder like single publish
+        if self.libraries_to_publish:
+            current_folder = os.path.dirname(bpy.data.filepath)
+            parent_folder_name = os.path.basename(current_folder)
+            target_folder = parent_folder_name
+        
         row = col.row(align=True)
         row.label(text="Target Folder:")
         row.label(text=target_folder)
@@ -821,7 +832,7 @@ class ASSET_OT_Publish(bpy.types.Operator):
             box = layout.box()
             box.label(text=f"🔗 Linked Libraries ({len(self.libraries_to_publish)}):", icon='LINKED')
             
-            for lib_info in self.libraries_to_publish[:10]:
+            for lib_info in self.libraries_to_publish[:4]:
                 lib_name = lib_info['folder_name']
                 lib_structure = lib_info['structure']
                 box.label(text=f"  → {lib_name}", icon='FILE_BLEND')
@@ -830,28 +841,10 @@ class ASSET_OT_Publish(bpy.types.Operator):
                 row.scale_y = 0.7
                 row.label(text=f"     Structure: {lib_structure}", icon='BLANK1')
             
-            if len(self.libraries_to_publish) > 10:
-                box.label(text=f"  ... and {len(self.libraries_to_publish) - 10} more libraries", icon='BLANK1')
+            if len(self.libraries_to_publish) > 4:
+                box.label(text=f"  ... and {len(self.libraries_to_publish) - 4} more libraries", icon='BLANK1')
         
         layout.separator()
-        
-        if context.scene.publish_packed_count > 0:
-            box = layout.box()
-            box.label(text="📦 Packed Textures:", icon='PACKAGE')
-            
-            row = box.row()
-            row.prop(context.scene, "publish_auto_unpack", text="Auto-Unpack After Publish", icon='CHECKMARK')
-            
-            info_col = box.column(align=True)
-            info_col.scale_y = 0.7
-            if context.scene.publish_auto_unpack:
-                info_col.label(text=f"✓ Will unpack {context.scene.publish_packed_count} textures to /textures", icon='BLANK1')
-                info_col.label(text="✓ Recommended for clean asset management", icon='BLANK1')
-            else:
-                info_col.label(text="⚠ Textures will remain packed in .blend file", icon='BLANK1')
-                info_col.label(text="⚠ May increase file size significantly", icon='BLANK1')
-            
-            layout.separator()
         
         if context.scene.publish_versioning_mode == 'VERSIONING':
             box = layout.box()
@@ -925,6 +918,15 @@ class ASSET_OT_Publish(bpy.types.Operator):
             rel_path = os.path.relpath(current_file_normalized, common_root)
             master_structure = os.path.dirname(rel_path)
             
+            # For single publish (no libraries), add asset folder level
+            if not self.libraries_to_publish or len(self.libraries_to_publish) == 0:
+                asset_folder_name = os.path.basename(current_folder)
+                
+                if not master_structure or master_structure == '.':
+                    master_structure = asset_folder_name
+                elif not master_structure.endswith(asset_folder_name):
+                    master_structure = os.path.join(master_structure, asset_folder_name)
+            
             master_target_folder = os.path.join(publish_path, master_structure)
             master_textures_dir = os.path.join(current_folder, "textures")
             
@@ -994,8 +996,14 @@ class ASSET_OT_Publish(bpy.types.Operator):
             copied_count = 0
             if os.path.exists(master_textures_dir) and self.textures_to_copy:
                 for tex_path in self.textures_to_copy:
-                    tex_filename = os.path.basename(tex_path)
-                    target_tex = os.path.join(target_textures, tex_filename)
+                    # Preserve subfolder structure (wood/, metal/, etc)
+                    rel_path = os.path.relpath(tex_path, master_textures_dir)
+                    target_tex = os.path.join(target_textures, rel_path)
+                    
+                    # Create subfolder if needed
+                    target_subdir = os.path.dirname(target_tex)
+                    os.makedirs(target_subdir, exist_ok=True)
+                    
                     shutil.copy2(tex_path, target_tex)
                     copied_count += 1
             elif not os.path.exists(master_textures_dir):
@@ -1037,36 +1045,10 @@ class ASSET_OT_Publish(bpy.types.Operator):
             force_text = " (FORCED)" if self.is_forced else ""
             lib_text = f" + {len(published_libraries)} libraries" if published_libraries else ""
             
-            unpacked_count = 0
-            
-            if context.scene.publish_auto_unpack:
-                try:
-                    blend_dir = os.path.dirname(bpy.data.filepath)
-                    textures_dir = os.path.join(blend_dir, "textures")
-                    
-                    os.makedirs(textures_dir, exist_ok=True)
-                    
-                    for img in bpy.data.images:
-                        if img.name in ('Render Result', 'Viewer Node'):
-                            continue
-                        if img.source != 'FILE':
-                            continue
-                        if img.packed_file:
-                            img.filepath = f"//textures/{img.name}"
-                            img.unpack(method='WRITE_LOCAL')
-                            unpacked_count += 1
-                    
-                    if unpacked_count > 0:
-                        bpy.ops.wm.save_mainfile()
-                except Exception as e:
-                    print(f"Warning: Auto-unpack failed: {e}")
-            
-            unpack_text = f" | Unpacked {unpacked_count} textures" if unpacked_count > 0 else ""
-            
             self.report(
                 {'INFO'},
                 f"Published {self.asset_name}{force_text}{lib_text} | "
-                f"{copied_count} textures | Target: {master_target_folder}{unpack_text}"
+                f"{copied_count} textures | Target: {master_target_folder}"
             )
             
             successful_libs = len(published_libraries)
@@ -1339,12 +1321,6 @@ def register():
         default=False
     )
     
-    bpy.types.Scene.publish_auto_unpack = BoolProperty(
-        name="Auto-Unpack Packed Textures",
-        description="Automatically unpack packed textures to /textures folder after successful publish (recommended)",
-        default=True
-    )
-    
     bpy.types.Scene.publish_sync_to_master = BoolProperty(
         name="Auto-sync to Master",
         description="Also update master file (without _v suffix) when publishing versioned file",
@@ -1452,7 +1428,6 @@ def unregister():
     del bpy.types.Scene.publish_select_all_libraries
     del bpy.types.Scene.publish_library_selection
     del bpy.types.Scene.publish_include_libraries
-    del bpy.types.Scene.publish_auto_unpack
     del bpy.types.Scene.publish_sync_to_master
     del bpy.types.Scene.publish_force
     del bpy.types.Scene.publish_versioning_mode

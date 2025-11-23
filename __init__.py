@@ -16,7 +16,7 @@
 bl_info = {
     "name": "Asset Management",
     "author": "Rizqi Alfajri",
-    "version": (1, 2, 0),
+    "version": (1, 2, 1),
     "blender": (4, 0, 0),
     "location": "View3D > N Panel",
     "description": "Production-ready asset management with publishing workflow, texture optimization, and version control",

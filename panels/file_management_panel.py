@@ -77,6 +77,10 @@ class TEXTURE_PT_FileManagementPanel(bpy.types.Panel):
             if img.source != 'FILE':
                 continue
             
+            # SKIP: Ignore external link images (library overrides)
+            if img.library:
+                continue
+            
             total_textures += 1
             
             # Count packed

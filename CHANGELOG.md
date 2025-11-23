@@ -7,6 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.1] - 2025-11-23
+
+### 🎯 Focus: Operation Scope Refinement
+
+This release focuses on **operation scope management** - ensuring all file operations target only the current blend file, not external linked libraries. This prevents conflicts between packed textures and linked library workflows.
+
+### ✨ Added
+
+**Consolidate Textures - Enhanced Conflict Detection:**
+- **Smart file comparison** - Detects identical files using modification time + file size matching
+- **Batch conflict resolution** - Single action applies to all conflicts (Relink/Overwrite/Skip modes)
+- **Optional unpacking** - Toggle to unpack embedded textures to textures/ folder during consolidate
+- **Simplified UI** - Removed per-file action buttons, streamlined to batch operation
+
+**Publish Dialog Improvements:**
+- **Limited library list** - Shows max 4 linked libraries (was 10), rest shown as "... and X more"
+- **Consistent target folder** - Shows parent folder name for include libraries (same as single publish)
+
+### 🔧 Changed
+
+**Operation Scope - Current Blend Only:**
+- **File Management panel** - All texture statistics now ignore external linked images (`img.library` check)
+- **Consolidate textures** - Only processes current file textures, skips library images
+- **Cleanup unused textures** - Only checks current file usage, preserves library textures
+- **Result**: External link images completely invisible to file operations
+
+**Publishing System:**
+- **Removed auto-unpack feature** - Packed textures now remain embedded during publish
+- **Rationale**: Auto-unpacking modified source files, causing conflicts with linked library workflow
+- **Alternative**: Use optional unpack toggle in Consolidate Textures operator instead
+
+**Single Publish Structure:**
+- **Added asset folder level** - Single publish now creates `publish/AssetName/AssetName.blend` structure
+- **Consistent behavior** - Matches structure mirroring logic used for library publishing
+
+### 🐛 Fixed
+
+**Batch Rename - Suffix Placement:**
+- Fixed suffix placement to be **before file extension** (was after)
+- Example: `char_BaseColor.png` + `_4k` → `char_BaseColor_4k.png` ✅ (was `char_BaseColor.png_4k` ❌)
+
+**Consolidate Textures - Conflict Detection:**
+- Added file conflict detection to prevent unnecessary overwrites
+- Uses modification time + size comparison (not hash - performance optimized)
+- Auto-suggests "Relink Only" when source and destination are identical files
+
+**Publish System - Recursive Texture Scanning:**
+- Fixed texture folder scanning to support **nested subfolders** (wood/, metal/, etc)
+- Preserves subfolder structure during publish (was flattening all textures to root)
+- Example: `textures/wood/wood_BaseColor.png` → `publish/.../textures/wood/wood_BaseColor.png` ✅
+
+### 🗑️ Removed
+
+**Publish System:**
+- Deleted `publish_auto_unpack` property (scene property)
+- Removed auto-unpack UI section (checkbox + info labels)
+- Removed auto-unpack execution loop (30 lines)
+- Updated validation warnings: "will be auto-unpacked" → "will remain packed"
+
+### 📋 Technical Changes
+
+**Library Filtering Pattern:**
+```python
+# Applied to 3 operators:
+for img in bpy.data.images:
+    if img.library:
+        continue  # Skip external link images
+    # Process only current file images
+```
+
+**Conflict Detection Logic:**
+```python
+source_mtime = os.path.getmtime(source_path)
+dest_mtime = os.path.getmtime(dest_path)
+is_same_file = (source_mtime == dest_mtime and source_size == dest_size)
+```
+
+**Recursive Texture Scanning:**
+```python
+# OLD: Only scans root level
+glob.glob(os.path.join(textures_dir, f"*.{ext}"))
+
+# NEW: Recursive scan with os.walk
+for root, dirs, files in os.walk(textures_dir):
+    dirs[:] = [d for d in dirs if not d.startswith('.')]  # Skip .backup, .trash
+    # ... scan all subfolders
+    
+# Preserve structure during copy
+rel_path = os.path.relpath(tex_path, master_textures_dir)
+target_tex = os.path.join(target_textures, rel_path)
+os.makedirs(os.path.dirname(target_tex), exist_ok=True)
+```
+
+### 🔒 Safety & Workflow
+
+- **Cleaner client delivery** - Published files keep packed textures as-is (no source file modification)
+- **Focused operations** - File Management panel operations only affect current blend file
+- **Conflict prevention** - Smart detection prevents accidental texture overwrites
+- **Batch efficiency** - Single decision for all conflicts (faster workflow)
+
+---
+
 ## [1.2.0] - 2025-11-20
 
 ### 🎯 Major Features
