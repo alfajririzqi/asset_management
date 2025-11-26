@@ -308,7 +308,21 @@ class FILE_OT_RestoreVersion(bpy.types.Operator):
             except Exception:
                 pass
 
-        self.report({'INFO'}, f"Restored: {os.path.basename(source)} (textures fixed: {fixed})")
+        # Auto-reload all linked libraries
+        reloaded_libs = 0
+        for lib in bpy.data.libraries:
+            try:
+                lib.reload()
+                reloaded_libs += 1
+            except Exception as e:
+                # Library might be missing or broken, skip silently
+                pass
+
+        if reloaded_libs > 0:
+            self.report({'INFO'}, f"Restored: {os.path.basename(source)} | Textures: {fixed} | Libraries: {reloaded_libs}")
+        else:
+            self.report({'INFO'}, f"Restored: {os.path.basename(source)} (textures fixed: {fixed})")
+        
         return {'FINISHED'}
 
 
