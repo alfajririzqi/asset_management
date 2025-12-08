@@ -207,15 +207,51 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                         'abs_path': abs_path
                     })
 
-        # Scan textures folder for unused textures
+        # Helper function for UDIM normalization
+        def normalize_udim(path):
+            """Match Blender's UDIM detection: any 4-digit number in standard range (1001-1100)"""
+            import re
+            udim_pattern = r'\b(\d{4})\b'
+            match = re.search(udim_pattern, path)
+            
+            if match:
+                tile_num = int(match.group(1))
+                if 1001 <= tile_num <= 1100:
+                    return path.replace(match.group(1), '<UDIM>', 1)
+            
+            return path
+        
         unused_textures = []
         if os.path.exists(textures_dir):
             used_files = set()
+            
+            for mat in bpy.data.materials:
+                if not mat.use_nodes:
+                    continue
+                for node in mat.node_tree.nodes:
+                    if node.type == 'TEX_IMAGE' and node.image:
+                        img = node.image
+                        try:
+                            if img.filepath:
+                                abs_path = bpy.path.abspath(img.filepath)
+                                norm_path = os.path.normpath(abs_path)
+                                
+                                if '<UDIM>' not in norm_path:
+                                    norm_path = normalize_udim(norm_path)
+                                
+                                used_files.add(norm_path)
+                        except Exception:
+                            continue
+            
             for img in bpy.data.images:
                 if img.source == 'FILE' and img.filepath:
                     abs_path = bpy.path.abspath(img.filepath)
-                    if os.path.exists(abs_path):
-                        used_files.add(os.path.normpath(abs_path))
+                    norm_path = os.path.normpath(abs_path)
+                    
+                    if '<UDIM>' not in norm_path:
+                        norm_path = normalize_udim(norm_path)
+                    
+                    used_files.add(norm_path)
             
             # Scan for image files
             image_extensions = {'.png', '.jpg', '.jpeg', '.tga', '.bmp', '.tiff', '.webp', '.exr', '.hdr', '.dds'}
@@ -226,7 +262,10 @@ class SCENE_OT_AnalyzeSceneDeep(bpy.types.Operator):
                     file_lower = file.lower()
                     if any(file_lower.endswith(ext) for ext in image_extensions):
                         file_path = os.path.normpath(os.path.join(root, file))
-                        if file_path not in used_files:
+                        
+                        normalized_file_path = normalize_udim(file_path)
+                        
+                        if normalized_file_path not in used_files:
                             rel_from_textures = os.path.relpath(file_path, textures_dir)
                             
                             try:

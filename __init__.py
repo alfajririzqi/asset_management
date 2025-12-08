@@ -16,12 +16,12 @@
 bl_info = {
     "name": "Asset Management",
     "author": "Rizqi Alfajri",
-    "version": (1, 2, 1),
-    "blender": (4, 0, 0),
+    "version": (1, 2, 2),
+    "blender": (3, 6, 0),
     "location": "View3D > N Panel",
     "description": "Production-ready asset management with publishing workflow, texture optimization, and version control",
     "category": "Assets",
-    "doc_url": "https://github.com/alfajririzqi/asset_management"
+    "doc_url": "https://docs-asset-management.vercel.app/"
 }
 
 import bpy

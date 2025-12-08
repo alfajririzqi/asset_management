@@ -42,32 +42,64 @@ class TEXTURE_OT_CleanupUnusedTextures(bpy.types.Operator):
             'psd', 'svg', 'gif', 'mp4', 'mov', 'avi', 'mkv',
         }
 
-        texture_files = set()  
-        for ext in IMAGE_EXTENSIONS:
-            texture_files.update(glob.glob(os.path.join(textures_dir, f"*.{ext}")))
-            texture_files.update(glob.glob(os.path.join(textures_dir, f"*.{ext.upper()}")))
-        
-        texture_files = list(texture_files)  
+        # Recursively scan all subfolders using os.walk
+        texture_files = []
+        for root, dirs, files in os.walk(textures_dir):
+            # Skip hidden folders (.backup, .trash)
+            dirs[:] = [d for d in dirs if not d.startswith('.')]
+            
+            for file in files:
+                ext = file.rsplit('.', 1)[-1].lower() if '.' in file else ''
+                if ext in IMAGE_EXTENSIONS:
+                    texture_files.append(os.path.join(root, file))  
 
+        # UDIM Logic
         def normalize_udim(path):
-            udim_match = re.search(r'(_\d{4})(?=\.)', path)
-            if udim_match:
-                return os.path.splitext(path)[0].replace(udim_match.group(1), '_<UDIM>')
+            """Match Blender's UDIM detection: any 4-digit number in standard range (1001-1100)"""
+            udim_pattern = r'\b(\d{4})\b'
+            match = re.search(udim_pattern, path)
+            
+            if match:
+                tile_num = int(match.group(1))
+                if 1001 <= tile_num <= 1100:
+                    return path.replace(match.group(1), '<UDIM>', 1)
+            
             return path
 
         used_textures = set()
+        
+        for mat in bpy.data.materials:
+            if not mat.use_nodes:
+                continue
+            for node in mat.node_tree.nodes:
+                if node.type == 'TEX_IMAGE' and node.image:
+                    img = node.image
+                    try:
+                        abs_path = bpy.path.abspath(img.filepath)
+                        norm_path = os.path.normpath(abs_path)
+                        
+                        if '<UDIM>' not in norm_path:
+                            norm_path = normalize_udim(norm_path)
+                        
+                        used_textures.add(norm_path)
+                    except Exception:
+                        continue
+        
         for img in bpy.data.images:
             if img.source != 'FILE':
                 continue
             
-            # SKIP: Ignore external link images (library overrides)
             if img.library:
                 continue
             
             try:
                 abs_path = bpy.path.abspath(img.filepath)
                 norm_path = os.path.normpath(abs_path)
-                norm_path = normalize_udim(norm_path)
+                
+                # If already has <UDIM>, keep it as-is
+                if '<UDIM>' not in norm_path:
+                    norm_path = normalize_udim(norm_path)
+                
                 used_textures.add(norm_path)
             except Exception:
                 continue
@@ -76,6 +108,7 @@ class TEXTURE_OT_CleanupUnusedTextures(bpy.types.Operator):
         for tex_path in texture_files:
             norm_path = os.path.normpath(tex_path)
             norm_path = normalize_udim(norm_path)
+            
             if norm_path not in used_textures:
                 self.unused_textures.append(tex_path)
 

@@ -1,7 +1,7 @@
 # Blender Asset Management Addon - Copilot Instructions
 
 ## 🎯 Addon Overview
-Production-ready Blender 4.0+ addon untuk asset management dengan fokus pada **publish workflow**, **texture optimization**, **versioning system**, dan **linked library management**.
+Production-ready Blender 3.6+ addon untuk asset management dengan fokus pada **publish workflow**, **texture optimization**, **versioning system**, dan **linked library management**.
 
 **Current Version:** 1.5.0  
 **Release Date:** November 17, 2025
@@ -659,5 +659,5 @@ if lib_path_norm == target_path_norm:
 
 **Last Updated:** 2025-11-17  
 **Version:** 1.5.0  
-**Blender Version:** 4.0+  
+**Blender Version:** 3.6+  
 **Python Version:** 3.10+

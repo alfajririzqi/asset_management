@@ -347,10 +347,15 @@ class ASSET_OT_Publish(bpy.types.Operator):
         used_textures = set()
         
         def normalize_udim(path):
-            """Normalize UDIM texture paths"""
-            udim_match = re.search(r'(_\d{4})(?=\.)', path)
-            if udim_match:
-                return os.path.splitext(path)[0].replace(udim_match.group(1), '_<UDIM>')
+            """Match Blender's UDIM detection: any 4-digit number in standard range (1001-1100)"""
+            udim_pattern = r'\b(\d{4})\b'
+            match = re.search(udim_pattern, path)
+            
+            if match:
+                tile_num = int(match.group(1))
+                if 1001 <= tile_num <= 1100:
+                    return path.replace(match.group(1), '<UDIM>', 1)
+            
             return path
         
         for img in bpy.data.images:
@@ -378,7 +383,6 @@ class ASSET_OT_Publish(bpy.types.Operator):
             'psd', 'svg', 'gif',
         }
         
-        # Recursively scan all subfolders using os.walk
         all_files = []
         for root, dirs, files in os.walk(textures_dir):
             # Skip hidden folders (.backup, .trash)
@@ -395,9 +399,15 @@ class ASSET_OT_Publish(bpy.types.Operator):
         unused_files = []
         
         def normalize_udim(path):
-            udim_match = re.search(r'(_\d{4})(?=\.)', path)
-            if udim_match:
-                return os.path.splitext(path)[0].replace(udim_match.group(1), '_<UDIM>')
+            """Match Blender's UDIM detection: any 4-digit number in standard range (1001-1100)"""
+            udim_pattern = r'\b(\d{4})\b'
+            match = re.search(udim_pattern, path)
+            
+            if match:
+                tile_num = int(match.group(1))
+                if 1001 <= tile_num <= 1100:
+                    return path.replace(match.group(1), '<UDIM>', 1)
+            
             return path
         
         for file_path in all_files:

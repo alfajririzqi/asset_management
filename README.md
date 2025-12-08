@@ -6,7 +6,7 @@
 
 *Streamline your workflow with intelligent validation, texture optimization, and automatic versioning*
 
-[![Blender](https://img.shields.io/badge/Blender-4.0+-orange?logo=blender&logoColor=white)](https://www.blender.org/)
+[![Blender](https://img.shields.io/badge/Blender-3.6+-orange?logo=blender&logoColor=white)](https://www.blender.org/)
 [![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-green)](LICENSE)
 [![Version](https://img.shields.io/badge/Version-1.2.1-brightgreen)](https://github.com/alfajririzqi/asset_management/releases)
@@ -179,7 +179,7 @@ Stop wasting time on manual asset publishing and texture cleanup. This addon aut
 
 | Requirement | Version | Notes |
 |-------------|---------|-------|
-| **Blender** | 4.0+ | Tested on 4.0 - 4.5.1 |
+| **Blender** | 3.6+ | Tested on 3.6 - 4.5 |
 | **Python** | 3.10+ | Bundled with Blender |
 | **OS** | Any | Windows, macOS, Linux |
 
@@ -195,9 +195,9 @@ Stop wasting time on manual asset publishing and texture cleanup. This addon aut
 <summary><b>🔧 Alternative: Git Clone (for developers)</b></summary>
 
 ```bash
-# Navigate to Blender addons directory
-cd %APPDATA%\Blender Foundation\Blender\4.0\scripts\addons  # Windows
-cd ~/Library/Application Support/Blender/4.0/scripts/addons # macOS
+# Navigate to Blender addons directory (replace X.X with your version: 3.6, 4.0, 4.5, etc)
+cd %APPDATA%\Blender Foundation\Blender\X.X\scripts\addons  # Windows
+cd ~/Library/Application Support/Blender/X.X/scripts/addons # macOS
 
 # Clone repository
 git clone https://github.com/YOUR_USERNAME/blender-asset-management.git asset_management
@@ -801,6 +801,6 @@ Made by [Rizqi Alfajri](https://github.com/alfajririzqi) for Blender Artists Wor
 
 ---
 
-**Version 1.2.1** • Last Updated: November 20, 2025 • Blender 4.0+
+**Version 1.2.2** • Last Updated: December 8, 2025 • Blender 3.6+
 
 </div>

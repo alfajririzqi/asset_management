@@ -7,6 +7,118 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.2] - 2025-12-08
+
+### 🎯 Focus: UDIM Detection & Blender Version Support
+
+Critical bug fix for UDIM texture detection in cleanup operations, plus expanded Blender version compatibility.
+
+### ✨ Added
+
+**Blender Version Support:**
+- **Extended compatibility** - Now supports Blender 3.6 to 4.5 (was 4.0+)
+- **Updated bl_info** - `"blender": (3, 6, 0)` minimum version
+- **Documentation updated** - All docs reflect new version range (3.6-4.5)
+
+### 🔧 Changed
+
+**Cleanup Unused Textures - Enhanced Detection:**
+- **Shader node scanning** - Now scans material shader nodes directly for texture references
+- **Dual-source detection** - Checks both material nodes AND bpy.data.images
+- **UDIM-aware** - Properly detects UDIM textures that aren't loaded in bpy.data.images
+- **Recursive folder scan** - Uses os.walk() to scan all subfolders (was glob root-only)
+
+**UDIM Normalization - Universal Separator Support:**
+- **Pattern updated** - `r'\b(\d{4})\b'` matches ANY separator (., _, -, etc)
+- **Range validation** - Only normalizes tiles in standard UDIM range (1001-1100)
+- **Consistency** - Applied to 3 operators: cleanup, publish (2 locations)
+
+### 🐛 Fixed
+
+**CRITICAL: UDIM Texture False Positives:**
+- **Root cause**: UDIM textures referenced in materials were NOT in bpy.data.images
+- **Old behavior**: 
+  ```
+  armor_BaseColor.1001.png → Marked as UNUSED ❌ (WRONG)
+  armor_BaseColor.1002.png → Marked as UNUSED ❌ (WRONG)
+  ```
+- **New behavior**:
+  ```
+  armor_BaseColor.1001.png → Marked as USED ✅ (CORRECT)
+  armor_BaseColor.1002.png → Marked as USED ✅ (CORRECT)
+  ```
+- **Solution**: Scan `mat.node_tree.nodes` for `TEX_IMAGE` nodes before checking bpy.data.images
+
+**UDIM Pattern Matching:**
+- **Fixed separator detection** - Now matches `.1001`, `_1001`, `-1001` patterns
+- **Old regex**: `r'(_\d{4})(?=\.)` - Only matched underscore separator
+- **New regex**: `r'\b(\d{4})\b'` - Matches word boundaries (any separator)
+- **Examples now working**:
+  ```
+  chair_basecolor.1001.png → chair_basecolor.<UDIM>.png ✅
+  texture_color.1050.exr   → texture_color.<UDIM>.exr ✅
+  wood-roughness-1025.png  → wood-roughness-<UDIM>.png ✅
+  ```
+
+### 📋 Technical Changes
+
+**Material Shader Node Scanning:**
+```python
+# NEW: Scan materials first (catches UDIM references)
+for mat in bpy.data.materials:
+    if mat.use_nodes:
+        for node in mat.node_tree.nodes:
+            if node.type == 'TEX_IMAGE' and node.image:
+                # Add to used_textures
+
+# THEN: Scan bpy.data.images (for non-material images)
+for img in bpy.data.images:
+    # Add to used_textures
+```
+
+**Recursive Texture Scanning:**
+```python
+# OLD: glob - root level only
+glob.glob(os.path.join(textures_dir, f"*.{ext}"))
+
+# NEW: os.walk - recursive scan
+for root, dirs, files in os.walk(textures_dir):
+    dirs[:] = [d for d in dirs if not d.startswith('.')]
+    # Process all subfolders
+```
+
+**UDIM Normalization Fix:**
+```python
+# OLD: Underscore only
+r'(_\d{4})(?=\.)' → Matches: _1001 only
+
+# NEW: Universal separator
+r'\b(\d{4})\b' → Matches: .1001, _1001, -1001, etc
+
+# Range validation
+if 1001 <= tile_num <= 1100:  # Standard UDIM range
+    return path.replace(match.group(1), '<UDIM>', 1)
+```
+
+### 🔍 Testing Notes
+
+**Verified Scenarios:**
+- ✅ UDIM textures with dot separator (`.1001`)
+- ✅ UDIM textures with underscore separator (`_1001`)
+- ✅ UDIM textures in material nodes (not in bpy.data.images)
+- ✅ Nested subfolder scanning (textures/armor/file.png)
+- ✅ External library textures ignored (library filter)
+- ✅ Non-UDIM textures unchanged
+- ✅ Range validation (2024 not treated as UDIM)
+
+### 📚 Documentation
+
+- Updated all references from "Blender 4.0+" to "Blender 3.6+"
+- Updated installation paths to use generic X.X notation
+- Updated test coverage: "3.6 - 4.5" (was "4.0 - 4.5.1")
+
+---
+
 ## [1.2.1] - 2025-11-23
 
 ### 🎯 Focus: Operation Scope Refinement
@@ -231,7 +343,7 @@ os.makedirs(os.path.dirname(target_tex), exist_ok=True)
 
 ### 🎯 Initial Release
 
-Complete asset management system for Blender 4.0+ with professional publishing workflow, texture optimization, and version control.
+Complete asset management system for Blender 3.6+ with professional publishing workflow, texture optimization, and version control.
 
 ### ✨ Features
 
@@ -386,7 +498,7 @@ Complete asset management system for Blender 4.0+ with professional publishing w
 - Caching for repeated operations
 
 **Compatibility:**
-- Blender 4.0+ (tested up to 4.5.1)
+- Blender 3.6+ (tested from 3.6 to 4.5)
 - Python 3.10+
 - Cross-platform (Windows, macOS, Linux)
 
